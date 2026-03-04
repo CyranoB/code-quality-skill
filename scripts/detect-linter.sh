@@ -256,7 +256,9 @@ detect_python() {
   fi
 
   # 4. Fallback: .py files present (check common project layouts)
-  if has_glob "*.py" || has_glob "src/*.py" || has_glob "app/*.py" \
+  # Include src/*/*.py for standard Python src layout (src/package_name/*.py)
+  if has_glob "*.py" || has_glob "src/*.py" || has_glob "src/*/*.py" \
+    || has_glob "app/*.py" || has_glob "app/*/*.py" \
     || has_glob "lib/*.py" || has_glob "tests/*.py" || has_glob "test/*.py"; then
     echo "TOOL=ruff"
     echo "COMMAND=uvx ruff check --output-format json"
