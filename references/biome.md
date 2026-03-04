@@ -77,13 +77,20 @@ Biome `--reporter=json` returns:
 
 ### Extracting line numbers
 
-Biome reports byte spans, not line numbers. To get line numbers from the output, look at `location.sourceCode` for context. When displaying results, if line numbers are unavailable, use the source code snippet instead.
+Biome's JSON reporter uses byte spans, not line numbers. **Preferred approach**: Run with `--reporter=github` to get line numbers, then use JSON for details if needed:
 
-Alternatively, use `--reporter=github` for line-number output (but less structured):
 ```bash
+# Step 1: Get line numbers via github reporter
 npx @biomejs/biome check --reporter=github [files...]
 # Output: ::error file=src/index.ts,line=10,col=5::lint/suspicious/noDoubleEquals
+
+# Step 2: If you need more detail, also run JSON
+npx @biomejs/biome check --reporter=json [files...]
 ```
+
+Parse the github reporter output with this pattern: `::severity file=PATH,line=LINE,col=COL::RULE`. Correlate with JSON output by matching rule category and file path.
+
+If only running one command, prefer `--reporter=github` since the skill output format requires line numbers.
 
 ## Config Files
 

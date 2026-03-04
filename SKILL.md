@@ -21,11 +21,13 @@ Analyze and fix code quality issues using the project's own linting tools. This 
 
 ## Step 1: Detect the Project's Linter
 
-Before any analysis, run detection to determine which tool and config the project uses.
+Before any analysis, determine the skill directory (the directory containing this SKILL.md file) and run detection.
 
 ```bash
-bash scripts/detect-linter.sh [target-path]
+bash <skill-dir>/scripts/detect-linter.sh [target-path]
 ```
+
+Replace `<skill-dir>` with the absolute path to the directory containing this SKILL.md. For example, if this file is at `/Users/alice/.claude/skills/code-quality/SKILL.md`, the command is `bash /Users/alice/.claude/skills/code-quality/scripts/detect-linter.sh [target-path]`.
 
 This outputs key=value pairs. Parse these values:
 
@@ -44,14 +46,16 @@ This outputs key=value pairs. Parse these values:
 
 **If FALLBACK=true**: Inform the user that no explicit linter config was found and the tool is running with default settings. Suggest they create a config for customized rules.
 
-**If TOOL=npm-script**: The project has a custom lint script. JSON output may not be available — run the script and interpret text output instead.
+**If TOOL=npm-script**: The project has a custom lint script but no recognized linter config for JSON output. Run the `COMMAND` (e.g., `npm run lint`) and parse the human-readable text output instead. Look for patterns like `file:line:col: message` or ESLint/Biome-style output. If the output is unstructured, present it verbatim and let the user interpret it.
 
-After detection, load the matching reference file from `references/` for tool-specific guidance:
-- `TOOL=eslint` → read `references/eslint.md`
-- `TOOL=biome` → read `references/biome.md`
-- `TOOL=ruff` → read `references/ruff.md`
+**If TOOL=pylint**: Pylint has no auto-fix capability (`FIX_COMMAND` will be empty). Provide manual fix suggestions instead. Pylint's JSON output uses `message-id` (e.g., `C0114`) and `type` (`convention`, `refactor`, `warning`, `error`, `fatal`). Map these to the unified severity: `fatal` → BLOCKER, `error` → CRITICAL, `warning` → MAJOR, `refactor` → MINOR, `convention` → INFO.
 
-Always read `references/severity-map.md` to normalize severity levels.
+After detection, load the matching reference file from `<skill-dir>/references/` for tool-specific guidance:
+- `TOOL=eslint` → read `<skill-dir>/references/eslint.md`
+- `TOOL=biome` → read `<skill-dir>/references/biome.md`
+- `TOOL=ruff` → read `<skill-dir>/references/ruff.md`
+
+Only load `<skill-dir>/references/severity-map.md` when the linter reports issues (not on clean results — saves tokens).
 
 ## Workflow A: Review File or Code
 
@@ -59,7 +63,7 @@ Always read `references/severity-map.md` to normalize severity levels.
 
 ### Steps
 
-1. **Detect**: Run `bash scripts/detect-linter.sh [project-path]`
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]`
 2. **Scope**: Determine target files from user request (specific file, directory, or project)
 3. **Run linter**: Execute the `COMMAND` with target files appended
    ```bash
@@ -81,7 +85,7 @@ If no issues are found, report a clean result.
 
 ### Steps
 
-1. **Detect**: Run `bash scripts/detect-linter.sh [project-path]`
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]`
 2. **Analyze first**: Run the `COMMAND` to get a baseline of current issues
 3. **Count baseline issues**: Note total count and severity breakdown
 4. **Run fix command**: Execute the `FIX_COMMAND` with target files
@@ -104,7 +108,7 @@ If the `FIX_COMMAND` is empty (e.g., pylint), inform the user and provide manual
 
 ### Steps
 
-1. **Detect**: Run `bash scripts/detect-linter.sh [project-path]`
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]`
 2. **Scope files**: Run the linter on the project root. The tool will respect `.gitignore` and skip `node_modules/`, `dist/`, `build/`, `venv/`, `__pycache__/` etc.
 3. **Run linter**: Execute `COMMAND` on the project root directory
    ```bash
@@ -129,7 +133,7 @@ Offer follow-up actions: "I can fix the N auto-fixable issues, or drill into a s
 
 1. **Get changed files**: Run detection with the `--changed-only` flag
    ```bash
-   bash scripts/detect-linter.sh [project-path] --changed-only
+   bash <skill-dir>/scripts/detect-linter.sh [project-path] --changed-only
    ```
 2. **Check FILES output**: If `FILES` is empty, report "No lintable files in current changes."
 3. **Run linter on changed files only**:
@@ -231,7 +235,7 @@ Load these as needed based on the detected tool:
 
 | File | When to load |
 |------|-------------|
-| `references/severity-map.md` | Always — needed for severity normalization |
-| `references/eslint.md` | When TOOL=eslint — CLI flags, output schema, common rules |
-| `references/biome.md` | When TOOL=biome — CLI flags, output schema, categories |
-| `references/ruff.md` | When TOOL=ruff — CLI flags, output schema, rule prefixes |
+| `<skill-dir>/references/severity-map.md` | When issues are found — severity normalization |
+| `<skill-dir>/references/eslint.md` | When TOOL=eslint — CLI flags, output schema, common rules |
+| `<skill-dir>/references/biome.md` | When TOOL=biome — CLI flags, output schema, categories |
+| `<skill-dir>/references/ruff.md` | When TOOL=ruff — CLI flags, output schema, rule prefixes |

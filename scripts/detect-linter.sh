@@ -28,11 +28,16 @@ USAGE
 fi
 
 # --- Args ---
-PROJECT_PATH="${1:-.}"
 CHANGED_ONLY=false
+PROJECT_PATH=""
 for arg in "$@"; do
-  [[ "$arg" == "--changed-only" ]] && CHANGED_ONLY=true
+  case "$arg" in
+    --changed-only) CHANGED_ONLY=true ;;
+    --*) ;; # skip unknown flags
+    *) [[ -z "$PROJECT_PATH" ]] && PROJECT_PATH="$arg" ;;
+  esac
 done
+PROJECT_PATH="${PROJECT_PATH:-.}"
 
 # Resolve to absolute path
 PROJECT_PATH="$(cd "$PROJECT_PATH" && pwd)"
@@ -82,7 +87,7 @@ pkg_has_lint_script() {
 pyproject_has_section() {
   local section="$1"
   [[ -f "$PROJECT_ROOT/pyproject.toml" ]] || return 1
-  grep -q "\[$section\]" "$PROJECT_ROOT/pyproject.toml" 2>/dev/null
+  grep -qE "^\[${section//./\\.}\]" "$PROJECT_ROOT/pyproject.toml" 2>/dev/null
 }
 
 # --- Changed files ---
@@ -110,7 +115,7 @@ get_changed_files() {
 
 # --- Detection ---
 detect_javascript() {
-  local tool="" command="" fix_command="" config="" fallback="false"
+  local tool="" cmd="" fix_cmd="" config="" fallback="false"
 
   # 1. package.json lint script
   if pkg_has_lint_script; then
@@ -123,24 +128,24 @@ detect_javascript() {
     # Check if it's biome or eslint underneath
     if has_file "biome.json" || has_file "biome.jsonc"; then
       tool="biome"
-      command="npx @biomejs/biome check --reporter=json"
-      fix_command="npx @biomejs/biome check --write"
+      cmd="npx @biomejs/biome check --reporter=json"
+      fix_cmd="npx @biomejs/biome check --write"
       config="$(ls "$PROJECT_ROOT"/biome.json* 2>/dev/null | head -1)"
     elif has_glob "eslint.config.*" || has_glob ".eslintrc*"; then
       tool="eslint"
-      command="npx eslint --format json"
-      fix_command="npx eslint --fix"
+      cmd="npx eslint --format json"
+      fix_cmd="npx eslint --fix"
       config="$(ls "$PROJECT_ROOT"/eslint.config.* "$PROJECT_ROOT"/.eslintrc* 2>/dev/null | head -1)"
     else
       # Use the npm script directly (no JSON output guaranteed)
       tool="npm-script"
-      command="$pkg_manager run lint"
-      fix_command="$pkg_manager run lint -- --fix"
+      cmd="$pkg_manager run lint"
+      fix_cmd="$pkg_manager run lint -- --fix"
       config="package.json"
     fi
     echo "TOOL=$tool"
-    echo "COMMAND=$command"
-    echo "FIX_COMMAND=$fix_command"
+    echo "COMMAND=$cmd"
+    echo "FIX_COMMAND=$fix_cmd"
     echo "CONFIG=$config"
     echo "LANGUAGE=javascript"
     echo "FALLBACK=$fallback"
@@ -192,8 +197,10 @@ detect_javascript() {
     return 0
   fi
 
-  # 5. Fallback: JS/TS files present
-  if has_glob "*.js" || has_glob "*.ts" || has_glob "*.jsx" || has_glob "*.tsx" || has_glob "src/*.js" || has_glob "src/*.ts"; then
+  # 5. Fallback: JS/TS files present (check common project layouts)
+  if has_glob "*.js" || has_glob "*.ts" || has_glob "*.jsx" || has_glob "*.tsx" \
+    || has_glob "src/*.js" || has_glob "src/*.ts" || has_glob "src/*.tsx" || has_glob "src/*.jsx" \
+    || has_glob "lib/*.js" || has_glob "lib/*.ts" || has_glob "app/*.js" || has_glob "app/*.ts"; then
     echo "TOOL=eslint"
     echo "COMMAND=npx eslint --format json"
     echo "FIX_COMMAND=npx eslint --fix"
@@ -207,7 +214,7 @@ detect_javascript() {
 }
 
 detect_python() {
-  local tool="" command="" fix_command="" config="" fallback="false"
+  local tool="" cmd="" fix_cmd="" config="" fallback="false"
 
   # 1. Explicit ruff config
   if has_file "ruff.toml" || has_file ".ruff.toml"; then
@@ -246,8 +253,9 @@ detect_python() {
     return 0
   fi
 
-  # 4. Fallback: .py files present
-  if has_glob "*.py" || has_glob "src/*.py" || has_glob "**/*.py"; then
+  # 4. Fallback: .py files present (check common project layouts)
+  if has_glob "*.py" || has_glob "src/*.py" || has_glob "app/*.py" \
+    || has_glob "lib/*.py" || has_glob "tests/*.py" || has_glob "test/*.py"; then
     echo "TOOL=ruff"
     echo "COMMAND=uvx ruff check --output-format json"
     echo "FIX_COMMAND=uvx ruff check --fix"
@@ -261,13 +269,12 @@ detect_python() {
 }
 
 # --- Main ---
+# Capture output and exit code in a single call (avoid running detection twice)
 OUTPUT=""
-
-# Try JS/TS first, then Python
-if detect_javascript > /dev/null 2>&1; then
-  OUTPUT="$(detect_javascript)"
-elif detect_python > /dev/null 2>&1; then
-  OUTPUT="$(detect_python)"
+if OUTPUT="$(detect_javascript 2>/dev/null)"; then
+  :
+elif OUTPUT="$(detect_python 2>/dev/null)"; then
+  :
 else
   echo "TOOL=none"
   echo "COMMAND="

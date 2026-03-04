@@ -36,7 +36,7 @@ Map by rule code prefix:
 
 | Prefix | Category         | Normalized |
 |--------|------------------|------------|
-| F      | Pyflakes (fatal) | BLOCKER    |
+| F      | Pyflakes         | CRITICAL   |
 | E      | pycodestyle error| CRITICAL   |
 | W      | pycodestyle warn | MAJOR      |
 | C      | Convention       | MINOR      |
@@ -53,6 +53,18 @@ Map by rule code prefix:
 | RUF    | Ruff-specific    | MAJOR      |
 
 For prefixes not listed, default to MAJOR.
+
+## Pylint
+
+| Native Type | Normalized |
+|-------------|------------|
+| fatal       | BLOCKER    |
+| error       | CRITICAL   |
+| warning     | MAJOR      |
+| refactor    | MINOR      |
+| convention  | INFO       |
+
+Pylint uses `type` field in JSON output: `"fatal"`, `"error"`, `"warning"`, `"refactor"`, `"convention"`.
 
 ## Display Format
 
