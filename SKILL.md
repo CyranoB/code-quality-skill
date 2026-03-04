@@ -42,7 +42,14 @@ This outputs key=value pairs. Parse these values:
 | `PROJECT_ROOT` | Detected project root |
 | `FILES` | File list (only with --changed-only) |
 
-**If TOOL=none**: Tell the user no supported linter was detected. Suggest installing one based on the project's language.
+**If TOOL=none and LANGUAGE=unknown**: No supported language detected. Tell the user the skill doesn't support this project type yet.
+
+**If TOOL=none and LANGUAGE=javascript**: JS/TS files are present but no linter is configured or installed. ESLint 9+ requires an explicit config file and will not run without one. Suggest setup:
+- Quick start: `npm init @eslint/config@latest` (interactive setup)
+- Or install Biome: `npm install --save-dev @biomejs/biome && npx @biomejs/biome init`
+- Then re-run the analysis.
+
+**If TOOL=none and LANGUAGE=python**: Python files are present but no linter configured. The fallback normally uses `uvx ruff` which works without config — if this was reached, something unexpected happened.
 
 **If FALLBACK=true**: Inform the user that no explicit linter config was found and the tool is running with default settings. Suggest they create a config for customized rules.
 
@@ -203,12 +210,12 @@ No issues found. Code looks clean.
 
 ## Error Handling
 
-### Tool not installed
+### Tool not installed or not configured
 
-If the linter command fails with "command not found" or similar:
-- **eslint**: `npm install --save-dev eslint` or `npx eslint --init`
-- **biome**: `npm install --save-dev @biomejs/biome` and `npx @biomejs/biome init`
-- **ruff**: `pip install ruff` or use `uvx ruff` (runs without install)
+If the linter command fails with "command not found", or ESLint fails with "couldn't find an eslint.config" (exit code 2):
+- **eslint**: `npm init @eslint/config@latest` (ESLint 9+ requires a config file — there is no default-rules mode)
+- **biome**: `npm install --save-dev @biomejs/biome && npx @biomejs/biome init`
+- **ruff**: `pip install ruff` or use `uvx ruff` (works without config, has sensible defaults)
 
 ### No config file
 

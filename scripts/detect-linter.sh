@@ -197,13 +197,15 @@ detect_javascript() {
     return 0
   fi
 
-  # 5. Fallback: JS/TS files present (check common project layouts)
+  # 5. Fallback: JS/TS files present but no linter configured
+  # Do NOT suggest eslint — ESLint 9+ requires a config file and won't run without one.
+  # Report the language so the skill can suggest setup.
   if has_glob "*.js" || has_glob "*.ts" || has_glob "*.jsx" || has_glob "*.tsx" \
     || has_glob "src/*.js" || has_glob "src/*.ts" || has_glob "src/*.tsx" || has_glob "src/*.jsx" \
     || has_glob "lib/*.js" || has_glob "lib/*.ts" || has_glob "app/*.js" || has_glob "app/*.ts"; then
-    echo "TOOL=eslint"
-    echo "COMMAND=npx eslint --format json"
-    echo "FIX_COMMAND=npx eslint --fix"
+    echo "TOOL=none"
+    echo "COMMAND="
+    echo "FIX_COMMAND="
     echo "CONFIG="
     echo "LANGUAGE=javascript"
     echo "FALLBACK=true"
