@@ -67,15 +67,19 @@ Only load `<skill-dir>/references/severity-map.md` when the linter reports issue
 
 The skill ships with built-in configs in `<skill-dir>/defaults/` so analysis works out of the box — no project setup required. Inspired by SonarQube's "Sonar way" quality profile.
 
-When no project-level config is found (`FALLBACK=true`), the detect script automatically uses these defaults via `--config` flags. The developer doesn't need to configure anything.
+When no project-level config is found (`FALLBACK=true`), the detect script automatically uses sensible defaults. The developer doesn't need to configure anything.
 
 ### Python — `defaults/ruff.toml`
 
-Rules enabled: `E` (pycodestyle errors), `F` (pyflakes), `W` (pycodestyle warnings), `C90` (cyclomatic complexity), `I` (import sorting), `N` (naming), `UP` (pyupgrade), `B` (bugbear), `S` (security/bandit), `SIM` (simplify), `T20` (print statements). Complexity threshold: 10. Runs via `uvx ruff` — zero install needed.
+Rules enabled: `E` (pycodestyle errors), `F` (pyflakes), `W` (pycodestyle warnings), `C90` (cyclomatic complexity), `I` (import sorting), `N` (naming), `UP` (pyupgrade), `B` (bugbear), `S` (security/bandit), `SIM` (simplify), `T20` (print statements). Complexity threshold: 10. Runs via `uvx ruff` — zero install needed. Config passed via `--config` flag.
 
-### JavaScript/TypeScript — `defaults/eslint.config.js`
+### JavaScript/TypeScript — Biome (zero-config)
 
-Core ESLint rules only (no plugins required): error detection (`no-unused-vars`, `no-undef`, `no-unreachable`), best practices (`eqeqeq`, `prefer-const`, `no-var`), cyclomatic complexity (threshold 10), security (`no-eval`), debug artifacts (`no-console`, `no-debugger`). Requires ESLint to be available via `npx`.
+When no linter is configured, the skill uses **Biome** as the fallback instead of ESLint. Biome handles both JavaScript and TypeScript natively — no parser plugins needed. It runs via `npx @biomejs/biome` with built-in rules covering: correctness (unused variables, unreachable code), suspicious patterns (`noExplicitAny`, `noDoubleEquals`), complexity, and formatting.
+
+**Why Biome over ESLint for defaults**: ESLint cannot parse TypeScript without `@typescript-eslint/parser`, which is rarely installed in unconfigured projects. Biome works out of the box for both JS and TS.
+
+The `defaults/eslint.config.js` file is still available for projects that explicitly use ESLint but lack a config — it can be referenced manually.
 
 ### When to suggest project-level config
 
@@ -203,7 +207,11 @@ Functions at or below 10 are manageable. 11–20 = moderate risk. 21+ = high ris
    npx eslint --rule '{"complexity": ["warn", 10]}' --format json [files...]
    ```
 
-   **TOOL=biome**: Biome has no cyclomatic complexity rule. Inform the user: "Biome does not support complexity analysis. Consider adding ESLint alongside Biome for complexity checks, or switch to ruff for Python projects."
+   **TOOL=biome** (configured or fallback): Biome has no cyclomatic complexity rule. Try ESLint with the skill's default config:
+   ```bash
+   npx eslint --config <skill-dir>/defaults/eslint.config.js --rule '{"complexity": ["warn", 10]}' --format json [files...]
+   ```
+   This works for `.js` files. For TypeScript files, ESLint needs `@typescript-eslint/parser` — if it fails, inform the user: "Complexity analysis requires ESLint with TypeScript support. Run `npm init @eslint/config@latest` to set up ESLint, then re-run."
 
    **TOOL=pylint**: Pylint does not include mccabe by default. Fall back to ruff:
    ```bash
@@ -214,8 +222,6 @@ Functions at or below 10 are manageable. 11–20 = moderate risk. 21+ = high ris
    ```bash
    uvx ruff check --select C901 --output-format json [files...]
    ```
-
-   **TOOL=none, LANGUAGE=javascript**: ESLint requires a config file (ESLint 9+). Suggest: "Run `npm init @eslint/config@latest` to set up ESLint, then re-run complexity analysis."
 
    **TOOL=npm-script**: Try ESLint directly (may already be installed as a dependency):
    ```bash
@@ -279,15 +285,21 @@ Analyzes module dependency structure to find circular dependencies and orphan mo
 2. **Load reference** based on `LANGUAGE`:
    - `javascript` → read `<skill-dir>/references/madge.md`
    - `python` → read `<skill-dir>/references/pydeps.md`
-3. **Determine entry point**: Use the target path from the user's request. If none specified, use `src/` if it exists, otherwise `.`.
+3. **Determine entry point**: Use the target path from the user's request. If none specified:
+   - For **TypeScript** projects (tsconfig.json exists): Find the main entry file — check `package.json` `main`/`module` fields, or look for `src/index.ts`, `src/server.ts`, `src/main.ts`, `src/app.ts`. **Always use a file entry point for TS** — passing just a directory often finds 0 files.
+   - For **JavaScript** projects: `src/` directory works fine.
 4. **Run circular dependency check**:
 
-   **JavaScript/TypeScript (madge)**:
+   **JavaScript (madge)**:
    ```bash
-   # Detect TypeScript: if tsconfig.json exists in PROJECT_ROOT, add --ts-config
-   npx madge --circular --json [entry-point]
-   npx madge --circular --json --ts-config tsconfig.json [entry-point]
+   npx madge --circular --json src/
    ```
+
+   **TypeScript (madge)** — must use file entry point + `--extensions`:
+   ```bash
+   npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx src/index.ts
+   ```
+
    Parse JSON output: array of cycles, each cycle is an array of file paths. Empty `[]` = clean. Exit code 1 = cycles found (expected).
 
    **Python (pydeps)**:

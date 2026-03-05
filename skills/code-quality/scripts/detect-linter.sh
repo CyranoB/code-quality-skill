@@ -203,14 +203,16 @@ detect_javascript() {
   fi
 
   # 5. Fallback: JS/TS files present but no linter configured
-  # Use the skill's default ESLint config so analysis works out of the box.
+  # Use Biome as the default — it handles both JS and TS natively with zero config.
+  # ESLint can't parse TypeScript without @typescript-eslint/parser, which is rarely
+  # installed in unconfigured projects. Biome works via npx with no plugins needed.
   if has_glob "*.js" || has_glob "*.ts" || has_glob "*.jsx" || has_glob "*.tsx" \
     || has_glob "src/*.js" || has_glob "src/*.ts" || has_glob "src/*.tsx" || has_glob "src/*.jsx" \
     || has_glob "lib/*.js" || has_glob "lib/*.ts" || has_glob "app/*.js" || has_glob "app/*.ts"; then
-    echo "TOOL=eslint"
-    echo "COMMAND=npx eslint --config $DEFAULTS_DIR/eslint.config.js --format json"
-    echo "FIX_COMMAND=npx eslint --config $DEFAULTS_DIR/eslint.config.js --fix"
-    echo "CONFIG=$DEFAULTS_DIR/eslint.config.js"
+    echo "TOOL=biome"
+    echo "COMMAND=npx --yes @biomejs/biome check --reporter=json"
+    echo "FIX_COMMAND=npx --yes @biomejs/biome check --write"
+    echo "CONFIG="
     echo "LANGUAGE=javascript"
     echo "FALLBACK=true"
     return 0

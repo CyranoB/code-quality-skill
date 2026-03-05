@@ -9,9 +9,11 @@ Madge creates dependency graphs from JS/TS modules and detects circular dependen
 ### Circular dependencies (primary use case)
 
 ```bash
+# JavaScript (directory works):
 npx madge --circular --json src/
-npx madge --circular --json src/index.ts
-npx madge --circular --json --ts-config tsconfig.json src/
+
+# TypeScript (use file entry point + --extensions):
+npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx src/index.ts
 ```
 
 ### Orphan modules (not imported by anything)
@@ -100,6 +102,7 @@ Without `--ts-config`, madge may miss dependencies that use path aliases (e.g., 
 ## Tips
 
 - `npx madge` works without installation — npx downloads it on the fly
+- **For TypeScript projects**: Use a file entry point (e.g., `src/server.ts`, `src/index.ts`) instead of just a directory. Madge with `--ts-config` resolves from entry points — passing `src/` alone may find 0 files. Also add `--extensions ts,tsx` to ensure TypeScript files are included.
 - For monorepos, run from the package directory, not the workspace root
 - Circular deps involving only type imports (`import type`) are usually safe at runtime but still indicate coupling — flag them as MAJOR instead of CRITICAL
 - Use `--warning` during debugging to see which imports madge couldn't resolve

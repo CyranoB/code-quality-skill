@@ -75,7 +75,7 @@ Once installed, the skill triggers automatically when you ask Claude Code to:
 3. `biome.json` / `biome.jsonc` → Biome
 4. `eslint` in devDependencies → ESLint
 5. `@biomejs/biome` in devDependencies → Biome
-6. Fallback: JS/TS files present → ESLint with built-in default config
+6. Fallback: JS/TS files present → Biome (zero-config, handles both JS and TS natively)
 
 ### Python
 1. `ruff.toml` / `.ruff.toml` → ruff
@@ -91,9 +91,9 @@ When no project-level linter config is found, the skill uses its built-in defaul
 
 11 rule categories enabled: pycodestyle errors/warnings, pyflakes, cyclomatic complexity (max 10), import sorting, naming conventions, pyupgrade, bugbear, security (bandit), simplify, and print statements. Pragmatic per-file ignores (allows `assert` in tests, `print` in scripts).
 
-### JavaScript (`defaults/eslint.config.js`)
+### JavaScript/TypeScript — Biome (zero-config)
 
-Core ESLint rules only (no plugins required): error detection (`no-unused-vars`, `no-unreachable`), best practices (`eqeqeq`, `prefer-const`), cyclomatic complexity (max 10), security (`no-eval`), debug artifacts (`no-console`, `no-debugger`).
+When no linter is configured, the skill uses Biome as the fallback. Biome handles both JS and TS natively — no parser plugins needed. Built-in rules cover correctness (unused variables, unreachable code), suspicious patterns (`noExplicitAny`, `noDoubleEquals`), complexity, and formatting. ESLint can't parse TypeScript without `@typescript-eslint/parser`, making Biome the better zero-config choice.
 
 To use your own rules instead, create a config file in your project root (`ruff.toml`, `eslint.config.js`, etc.) and the skill will use that automatically.
 
@@ -137,7 +137,7 @@ code-quality-skill/
 
 - Claude Code CLI
 - **Python**: No setup needed — uses `uvx ruff` which runs without installation
-- **JavaScript/TypeScript**: ESLint must be available via `npx` (install with `npm install --save-dev eslint` if needed). Alternatively, Biome works too (`npm install --save-dev @biomejs/biome`)
+- **JavaScript/TypeScript**: No setup needed for fallback — uses Biome via `npx` (handles both JS and TS natively). If you prefer ESLint, create an `eslint.config.js` and the skill will use it instead
 - **Dependency analysis**: madge (`npx madge`) for JS/TS, pydeps (`uvx pydeps`) for Python — both zero-install
 
 ## License
