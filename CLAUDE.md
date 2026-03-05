@@ -47,4 +47,5 @@ skills/code-quality/
 | C | Project audit | Same as A, full project scope |
 | D | Pre-commit check | Same as A, changed files only |
 | E | Complexity analysis | ESLint complexity rule, ruff C901 |
-| F | Dependency analysis | madge (JS/TS), pydeps (Python) |
+| F | Dependency analysis | madge (JS/TS), depcycle (Python) |
+| G | Linter setup | npm init @eslint/config, ruff.toml, biome init |

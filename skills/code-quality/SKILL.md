@@ -12,6 +12,8 @@ description: >-
   Also triggers on "circular dependencies", "circular imports", "dependency
   graph", "check imports", "module dependencies", "find cycles", or "orphan
   modules".
+  Also triggers on "set up linting", "configure eslint", "configure ruff",
+  "add a linter", "set up code quality", "init eslint", or "set up biome".
 ---
 
 # Code Quality Skill
@@ -397,6 +399,95 @@ Consider removing them if they are unused, or adding imports if they were accide
 ```
 
 **Important**: Always provide actionable refactoring suggestions for circular dependencies. The fix is almost always to extract a shared dependency into a separate module. Do not suggest "just remove the import" without explaining where it should go instead.
+
+## Workflow G: Linter Setup
+
+**Triggers**: "set up linting", "configure eslint", "configure ruff", "add a linter", "set up code quality", "init eslint", "init ruff", "set up biome"
+
+Helps the user set up a linter in a project that doesn't have one. This is the **only workflow that modifies the project** — all other workflows are read-only analysis.
+
+### Steps
+
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `TOOL`, `LANGUAGE`, and `FALLBACK`.
+2. **Check if already configured**: If `FALLBACK=false`, the project already has a linter. Inform the user: "Your project already uses [TOOL] with config at [CONFIG]. Want me to review or update it instead?"
+3. **Determine language and tool**:
+
+   **Python** — recommend ruff (fastest, most comprehensive, zero install):
+   ```bash
+   # Create ruff.toml with sensible defaults
+   ```
+   Use the skill's `defaults/ruff.toml` as a starting point. Copy it into the project root:
+   ```bash
+   cp <skill-dir>/defaults/ruff.toml [project-root]/ruff.toml
+   ```
+   That's it — ruff needs no installation if `uvx` is available, and the config is self-contained.
+
+   **JavaScript (no TypeScript)** — recommend ESLint:
+   ```bash
+   npm init @eslint/config@latest
+   ```
+   This runs an interactive wizard that installs ESLint and creates `eslint.config.js`. If the user wants a non-interactive setup, create `eslint.config.js` using the skill's default as a template:
+   ```bash
+   cp <skill-dir>/defaults/eslint.config.js [project-root]/eslint.config.js
+   npm install --save-dev eslint
+   ```
+
+   **TypeScript** — recommend ESLint with TypeScript support:
+   ```bash
+   npm init @eslint/config@latest
+   ```
+   The wizard detects TypeScript and installs `typescript-eslint` automatically. If the user wants non-interactive setup:
+   ```bash
+   npm install --save-dev eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin typescript-eslint
+   ```
+   Then create an `eslint.config.js` that imports `typescript-eslint`:
+   ```js
+   import tseslint from 'typescript-eslint';
+
+   export default tseslint.config(
+     ...tseslint.configs.recommended,
+     {
+       rules: {
+         "complexity": ["warn", 10],
+       },
+     },
+   );
+   ```
+
+   **Alternative — Biome** (if the user prefers or mentions Biome):
+   ```bash
+   npm install --save-dev @biomejs/biome
+   npx @biomejs/biome init
+   ```
+   Biome creates a `biome.json` with sensible defaults and handles both JS and TS natively.
+
+4. **Verify setup**: After creating the config and installing dependencies, run detection again to confirm:
+   ```bash
+   bash <skill-dir>/scripts/detect-linter.sh [project-path]
+   ```
+   Verify `FALLBACK=false` and `TOOL` matches what was set up.
+
+5. **Run initial analysis**: Offer to run a Workflow A review or Workflow C audit to show the user what the new linter finds.
+
+6. **Suggest git add**: Remind the user to commit the new config:
+   > "Linter configured. Don't forget to commit the config file so your team gets the same rules."
+
+### Example Output
+
+```
+## Linter Setup Complete
+
+**Tool**: ESLint + TypeScript | **Config**: eslint.config.js
+
+Installed:
+- eslint@9.x
+- typescript-eslint@8.x
+- @typescript-eslint/parser@8.x
+
+Created: eslint.config.js (based on typescript-eslint recommended rules + complexity threshold 10)
+
+Want me to run an initial code quality audit?
+```
 
 ## Output Format
 

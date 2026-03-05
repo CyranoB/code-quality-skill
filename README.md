@@ -40,6 +40,7 @@ Once installed, the skill triggers automatically when you ask Claude Code to:
 - **Pre-commit check**: "check my changes before committing"
 - **Complexity analysis**: "check complexity in src/" or "find complex functions"
 - **Dependency analysis**: "find circular dependencies" or "check imports"
+- **Linter setup**: "set up linting" or "configure eslint for my project"
 - **Run a specific linter**: "run eslint on src/"
 - **Find bugs**: "any issues in main.py?"
 
@@ -54,6 +55,8 @@ Once installed, the skill triggers automatically when you ask Claude Code to:
 > find complex functions
 > find circular dependencies in src/
 > check for orphan modules
+> set up linting for my project
+> configure eslint with typescript
 > run ruff on my Python files
 > clean up this code
 ```
