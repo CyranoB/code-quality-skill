@@ -1,0 +1,11 @@
+{
+  "name": "code-quality",
+  "version": "1.0.0",
+  "description": "Code quality analysis, linting, and auto-fixes using ESLint, Biome, and ruff",
+  "author": {
+    "name": "CyranoB"
+  },
+  "repository": "https://github.com/CyranoB/code-quality-skill",
+  "license": "MIT",
+  "keywords": ["linting", "code-quality", "eslint", "biome", "ruff", "static-analysis"]
+}

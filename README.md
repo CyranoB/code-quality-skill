@@ -12,23 +12,20 @@ This skill detects your project's linter, runs it, normalizes the output, and pr
 
 ## Installation
 
-### Option 1: Install from the skill directory
+### From the marketplace (recommended)
+
+```bash
+# Add the marketplace
+claude plugin marketplace add CyranoB/code-quality-skill
+
+# Install the plugin
+claude plugin install code-quality@code-quality-marketplace
+```
+
+### From a local clone
 
 ```bash
 claude skill install /path/to/code-quality-skill
-```
-
-### Option 2: Symlink into your skills directory
-
-```bash
-mkdir -p ~/.claude/skills
-ln -s /path/to/code-quality-skill ~/.claude/skills/code-quality
-```
-
-### Option 3: Install from GitHub
-
-```bash
-claude skill install https://github.com/your-username/code-quality-skill
 ```
 
 ## Usage
@@ -91,14 +88,19 @@ Once installed, the skill triggers automatically when you ask Claude Code to:
 
 ```
 code-quality-skill/
-├── SKILL.md                  # Core skill definition
-├── scripts/
-│   └── detect-linter.sh      # Auto-detect project linter
-├── references/
-│   ├── eslint.md              # ESLint CLI reference
-│   ├── biome.md               # Biome CLI reference
-│   ├── ruff.md                # Ruff CLI reference
-│   └── severity-map.md        # Severity normalization
+├── .claude-plugin/
+│   ├── plugin.json            # Plugin manifest
+│   └── marketplace.json       # Self-hosted marketplace definition
+├── skills/
+│   └── code-quality/
+│       ├── SKILL.md           # Core skill definition
+│       ├── scripts/
+│       │   └── detect-linter.sh   # Auto-detect project linter
+│       └── references/
+│           ├── eslint.md      # ESLint CLI reference
+│           ├── biome.md       # Biome CLI reference
+│           ├── ruff.md        # Ruff CLI reference
+│           └── severity-map.md    # Severity normalization
 ├── README.md
 └── LICENSE
 ```
