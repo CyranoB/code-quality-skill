@@ -81,7 +81,7 @@ When presenting findings, use the tag prefix:
 
 Group findings by severity (BLOCKER first), then by file, then by line number.
 
-## Dependency Analysis (madge / pydeps)
+## Dependency Analysis (madge / depcycle)
 
 | Finding | Normalized | Rationale |
 |---------|------------|-----------|

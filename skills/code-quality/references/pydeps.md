@@ -1,104 +1,93 @@
-# Pydeps Reference
+# Python Dependency Analysis Reference
 
-Pydeps generates Python module dependency graphs and detects import cycles.
+## Primary Tool: depcycle
 
-**Python only.** Runs via `uvx pydeps` — no installation needed. Graphviz is only required for graph visualization (SVG/PNG), NOT for cycle detection.
+`depcycle` detects circular dependencies in Python projects. It works on any directory of Python files — no package structure required.
 
-## CLI Usage
+**Zero install**: Runs via `uvx depcycle` — no pip install needed.
 
-### Circular import detection (primary use case)
-
-```bash
-uvx pydeps cycles
-uvx pydeps cycles --noshow
-```
-
-The `cycles` subcommand analyzes the current package and reports import cycles. Must be run from within a Python package directory (one containing `__init__.py` or `pyproject.toml`).
-
-### Dependency analysis (text output)
+### CLI Usage
 
 ```bash
-uvx pydeps --show-deps --no-output --noshow <package-name>
-```
-
-`--show-deps` prints the dependency tree to stdout. `--no-output` prevents SVG file creation. `--noshow` prevents opening a viewer.
-
-### External dependencies (JSON output)
-
-```bash
-uvx pydeps --externals <package-name>
-```
-
-Returns a JSON list of direct external dependencies:
-
-```json
-[
-  "requests",
-  "click",
-  "pydantic"
-]
-```
-
-### Full graph (requires Graphviz)
-
-```bash
-uvx pydeps <package-name>                        # SVG to stdout
-uvx pydeps <package-name> -o deps.svg            # SVG to file
-uvx pydeps <package-name> -T png -o deps.png     # PNG to file
-```
-
-## Cycle Detection Output
-
-`pydeps cycles` outputs text to stdout. Each cycle is printed as a chain of module names:
-
-```
-Cycle: mypackage.orders -> mypackage.orders.validate -> mypackage.orders
-Cycle: mypackage.auth.session -> mypackage.auth.tokens -> mypackage.auth.refresh -> mypackage.auth.session
-```
-
-**No JSON output** — Claude must parse the text directly. Look for lines starting with `Cycle:` and extract the module chain from the `->` separators.
-
-If no cycles are found, there is no output (empty stdout).
-
-## Common Options
-
-| Flag | Purpose |
-|------|---------|
-| `cycles` | Subcommand to detect import cycles |
-| `--show-deps` | Print dependency analysis to stdout |
-| `--no-output` | Don't create SVG/PNG file |
-| `--noshow` | Don't open external viewer |
-| `--externals` | List direct external dependencies (JSON) |
-| `-x PATTERN` | Exclude modules matching pattern |
-| `-xx MODULE` | Exclude module and its dependencies |
-| `--only MODULE` | Only include modules starting with path |
-| `--max-bacon N` | Exclude nodes more than N hops away (default: 2, 0 = infinite) |
-| `--max-module-depth N` | Coalesce deep modules to N levels |
-| `--reverse` | Show reverse dependency graph |
-| `-o FILE` | Write output to file |
-| `-T FORMAT` | Output format: svg (default) or png |
-| `-v` | Verbose mode (-vv, -vvv for more) |
-
-## Package Detection
-
-Pydeps needs a Python package to analyze. It looks for:
-1. A directory with `__init__.py`
-2. A `pyproject.toml` with package metadata
-3. A `setup.py` or `setup.cfg`
-
-For script-only projects (loose `.py` files without package structure), pydeps may not work. In this case, suggest the user organize code into a package, or use an alternative like `depcycle`:
-
-```bash
+uvx depcycle <path>
+uvx depcycle src/mypackage
 uvx depcycle .
 ```
 
-`depcycle` is a simpler tool that works on any directory of Python files without requiring package structure.
+### Output
+
+**Clean result**:
+```
+Analyzing project: src/web_forager
+Building dependency graph...
+Found 28 modules
+✓ No circular dependencies detected
+```
+
+**Circular dependencies found**:
+```
+Analyzing project: src/mypackage
+Building dependency graph...
+Found 15 modules
+✗ Circular dependencies detected:
+
+  mypackage.orders -> mypackage.orders.validate -> mypackage.orders
+  mypackage.auth.session -> mypackage.auth.tokens -> mypackage.auth.session
+```
+
+Parse the text output: look for lines with `->` chains showing the cycle. The `✓` / `✗` prefix indicates clean vs. findings.
+
+**Note**: depcycle also generates a `dependencies.png` visualization file in the current directory. This is a side effect — the text output is what the skill uses.
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | No circular dependencies |
+| 1 | Circular dependencies found (expected — parse output) |
+
+## Secondary Tool: pydeps
+
+Pydeps is a graph visualization tool for Python module dependencies. It is primarily useful for generating SVG/PNG dependency graphs, NOT for cycle detection.
+
+**Use pydeps when**: The user asks for a dependency graph/visualization, not just cycle detection.
+
+**Requires**: Graphviz for graph output (`brew install graphviz` on macOS).
+
+### CLI Usage
+
+```bash
+# External dependencies (JSON output — no Graphviz needed)
+uvx pydeps --externals <package-path>
+
+# Dependency graph (requires Graphviz)
+uvx pydeps <package-path>                    # SVG to stdout
+uvx pydeps <package-path> -o deps.svg        # SVG to file
+uvx pydeps <package-path> -T png -o deps.png # PNG to file
+
+# Suppress viewer
+uvx pydeps <package-path> --noshow -o deps.svg
+```
+
+### Common Options
+
+| Flag | Purpose |
+|------|---------|
+| `--externals` | List direct external dependencies (JSON output) |
+| `--no-output` | Don't create SVG/PNG file |
+| `--noshow` | Don't open external viewer |
+| `--show-deps` | Print dependency analysis to stdout |
+| `-x PATTERN` | Exclude modules matching pattern |
+| `-xx MODULE` | Exclude module and its dependencies |
+| `--only MODULE` | Only include modules starting with path |
+| `--max-bacon N` | Max hops from entry (default: 2, 0 = infinite) |
+| `--reverse` | Show reverse dependency graph |
+| `-o FILE` | Write output to file |
+| `-T FORMAT` | Output format: svg (default) or png |
 
 ## Tips
 
-- `uvx pydeps` works without installation — uvx handles everything
-- `pydeps cycles` does NOT require Graphviz (no graph rendering needed)
-- Full graph visualization (`pydeps <pkg>`) DOES require Graphviz: `brew install graphviz` (macOS), `apt install graphviz` (Ubuntu)
-- Use `--max-bacon 0` to see the full dependency tree (default is 2 hops)
-- Use `-x tests -x docs` to exclude test and docs directories
-- Pydeps respects `.gitignore` patterns
+- **Always prefer depcycle for cycle detection** — it's simpler, faster, and gives clear text output
+- depcycle works on any directory; pydeps needs a proper Python package (with `__init__.py`)
+- Both tools run via `uvx` with zero installation
+- `pydeps --externals` is useful for auditing third-party dependencies (JSON output)

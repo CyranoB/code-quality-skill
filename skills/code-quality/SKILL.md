@@ -277,7 +277,7 @@ Analyzes module dependency structure to find circular dependencies and orphan mo
 | Language | Tool | Zero-install |
 |----------|------|-------------|
 | JavaScript/TypeScript | madge (`npx madge`) | yes |
-| Python | pydeps (`uvx pydeps`) | yes |
+| Python | depcycle (`uvx depcycle`) | yes |
 
 ### Steps
 
@@ -302,16 +302,13 @@ Analyzes module dependency structure to find circular dependencies and orphan mo
 
    Parse JSON output: array of cycles, each cycle is an array of file paths. Empty `[]` = clean. Exit code 1 = cycles found (expected).
 
-   **Python (pydeps)**:
+   **Python (depcycle)**:
    ```bash
-   uvx pydeps cycles --noshow
+   uvx depcycle <package-path>
+   # e.g.: uvx depcycle src/mypackage
+   # e.g.: uvx depcycle .
    ```
-   Parse text output: look for lines starting with `Cycle:`, extract module chain from `->` separators. No output = clean.
-
-   **Python fallback** — if pydeps fails (e.g., no package structure), try depcycle:
-   ```bash
-   uvx depcycle .
-   ```
+   Parse text output: look for `✓ No circular dependencies` (clean) or `->` chains showing cycles. Exit code 1 = cycles found (expected).
 
 5. **Optionally check orphans** (JS/TS only — madge supports this):
    ```bash
@@ -484,4 +481,4 @@ Load these as needed based on the detected tool:
 | `<skill-dir>/references/biome.md` | When TOOL=biome — CLI flags, output schema, categories |
 | `<skill-dir>/references/ruff.md` | When TOOL=ruff — CLI flags, output schema, rule prefixes |
 | `<skill-dir>/references/madge.md` | Workflow F, JS/TS dependency analysis — CLI flags, output schema |
-| `<skill-dir>/references/pydeps.md` | Workflow F, Python dependency analysis — CLI flags, cycle detection |
+| `<skill-dir>/references/pydeps.md` | Workflow F, Python dependency analysis — depcycle (primary), pydeps (graphs) |

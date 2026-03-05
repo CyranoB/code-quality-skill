@@ -10,7 +10,7 @@ This skill detects your project's linter, runs it, normalizes the output, and pr
 
 **Supported tools**:
 - **JavaScript/TypeScript**: ESLint, Biome, madge (dependency analysis)
-- **Python**: ruff, pydeps (dependency analysis)
+- **Python**: ruff, depcycle (dependency analysis)
 
 ## Installation
 
@@ -65,7 +65,7 @@ Once installed, the skill triggers automatically when you ask Claude Code to:
 3. **Normalization**: Maps tool-specific severity levels to a unified 5-tier scale (BLOCKER → CRITICAL → MAJOR → MINOR → INFO)
 4. **Presentation**: Shows findings grouped by severity with explanations and fix suggestions
 5. **Fixing**: Uses the tool's native `--fix` and re-analyzes to confirm
-6. **Dependency analysis**: Detects circular dependencies and orphan modules — madge for JS/TS, pydeps for Python (both zero-install via `npx`/`uvx`)
+6. **Dependency analysis**: Detects circular dependencies and orphan modules — madge for JS/TS, depcycle for Python (both zero-install via `npx`/`uvx`)
 
 ## Detection Priority
 
@@ -127,7 +127,7 @@ code-quality-skill/
 │           ├── biome.md       # Biome CLI reference
 │           ├── ruff.md        # Ruff CLI reference
 │           ├── madge.md       # Madge CLI reference (JS/TS dependency analysis)
-│           ├── pydeps.md      # Pydeps CLI reference (Python dependency analysis)
+│           ├── pydeps.md      # Python dependency analysis (depcycle + pydeps)
 │           └── severity-map.md    # Severity normalization
 ├── README.md
 └── LICENSE
@@ -138,7 +138,7 @@ code-quality-skill/
 - Claude Code CLI
 - **Python**: No setup needed — uses `uvx ruff` which runs without installation
 - **JavaScript/TypeScript**: No setup needed for fallback — uses Biome via `npx` (handles both JS and TS natively). If you prefer ESLint, create an `eslint.config.js` and the skill will use it instead
-- **Dependency analysis**: madge (`npx madge`) for JS/TS, pydeps (`uvx pydeps`) for Python — both zero-install
+- **Dependency analysis**: madge (`npx madge`) for JS/TS, depcycle (`uvx depcycle`) for Python — both zero-install
 
 ## License
 
