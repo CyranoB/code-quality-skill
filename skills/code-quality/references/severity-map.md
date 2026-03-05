@@ -80,3 +80,10 @@ When presenting findings, use the tag prefix:
 ```
 
 Group findings by severity (BLOCKER first), then by file, then by line number.
+
+## Madge (Dependency Analysis)
+
+| Finding | Normalized | Rationale |
+|---------|------------|-----------|
+| Circular dependency | CRITICAL | Can cause runtime crashes (TDZ errors), breaks tree-shaking, signals tight coupling |
+| Orphan module | INFO | Dead code — not harmful but indicates unused files |

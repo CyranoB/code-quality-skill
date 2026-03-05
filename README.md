@@ -9,7 +9,7 @@ This skill detects your project's linter, runs it, normalizes the output, and pr
 **No config? No problem.** The skill ships with built-in default configs (inspired by SonarQube's "Sonar way" quality profile) so analysis works even on projects with zero linter setup. When your project has its own config, the skill uses that instead.
 
 **Supported tools**:
-- **JavaScript/TypeScript**: ESLint, Biome
+- **JavaScript/TypeScript**: ESLint, Biome, madge (dependency analysis)
 - **Python**: ruff
 
 ## Installation
@@ -39,6 +39,7 @@ Once installed, the skill triggers automatically when you ask Claude Code to:
 - **Audit a project**: "audit my project for code quality"
 - **Pre-commit check**: "check my changes before committing"
 - **Complexity analysis**: "check complexity in src/" or "find complex functions"
+- **Dependency analysis**: "find circular dependencies" or "check imports"
 - **Run a specific linter**: "run eslint on src/"
 - **Find bugs**: "any issues in main.py?"
 
@@ -51,6 +52,8 @@ Once installed, the skill triggers automatically when you ask Claude Code to:
 > check before commit
 > check complexity in my Python code
 > find complex functions
+> find circular dependencies in src/
+> check for orphan modules
 > run ruff on my Python files
 > clean up this code
 ```
@@ -62,6 +65,7 @@ Once installed, the skill triggers automatically when you ask Claude Code to:
 3. **Normalization**: Maps tool-specific severity levels to a unified 5-tier scale (BLOCKER → CRITICAL → MAJOR → MINOR → INFO)
 4. **Presentation**: Shows findings grouped by severity with explanations and fix suggestions
 5. **Fixing**: Uses the tool's native `--fix` and re-analyzes to confirm
+6. **Dependency analysis**: Runs madge to detect circular dependencies and orphan modules (JS/TS)
 
 ## Detection Priority
 
@@ -122,6 +126,7 @@ code-quality-skill/
 │           ├── eslint.md      # ESLint CLI reference
 │           ├── biome.md       # Biome CLI reference
 │           ├── ruff.md        # Ruff CLI reference
+│           ├── madge.md       # Madge CLI reference (dependency analysis)
 │           └── severity-map.md    # Severity normalization
 ├── README.md
 └── LICENSE
@@ -132,6 +137,7 @@ code-quality-skill/
 - Claude Code CLI
 - **Python**: No setup needed — uses `uvx ruff` which runs without installation
 - **JavaScript/TypeScript**: ESLint must be available via `npx` (install with `npm install --save-dev eslint` if needed). Alternatively, Biome works too (`npm install --save-dev @biomejs/biome`)
+- **Dependency analysis** (JS/TS): madge runs via `npx madge` — no install needed
 
 ## License
 

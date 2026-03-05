@@ -9,6 +9,9 @@ description: >-
   code quality issues like unused variables, type errors, or style violations.
   Also triggers on "cyclomatic complexity", "check complexity", "find complex
   functions", "complexity analysis", "too complex", or "hard to test".
+  Also triggers on "circular dependencies", "circular imports", "dependency
+  graph", "check imports", "module dependencies", "find cycles", or "orphan
+  modules".
 ---
 
 # Code Quality Skill
@@ -147,7 +150,7 @@ If the `FIX_COMMAND` is empty (e.g., pylint), inform the user and provide manual
    - Most problematic files (top 5 by issue count)
    - Quick wins (issues that are auto-fixable)
 
-Offer follow-up actions: "I can fix the N auto-fixable issues, or drill into a specific file."
+Offer follow-up actions: "I can fix the N auto-fixable issues, drill into a specific file, or check for circular dependencies."
 
 ## Workflow D: Pre-commit Check
 
@@ -259,6 +262,90 @@ No functions exceed the complexity threshold. Code is well-structured.
 
 **Important**: Complexity violations have no auto-fix. Always provide manual refactoring suggestions. Do not offer to run `--fix`.
 
+## Workflow F: Dependency Analysis
+
+**Triggers**: "circular dependencies", "circular imports", "dependency graph", "check imports", "module dependencies", "find cycles", "orphan modules"
+
+Analyzes module dependency structure to find circular dependencies and orphan modules using **madge**. JavaScript/TypeScript only — for Python, note that no zero-install equivalent exists yet.
+
+### Steps
+
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE` and `PROJECT_ROOT`.
+2. **Check language**: If `LANGUAGE` is not `javascript`, inform the user: "Dependency analysis is currently supported for JavaScript/TypeScript projects only."
+3. **Load reference**: Read `<skill-dir>/references/madge.md` for CLI details.
+4. **Detect TypeScript**: Check if `tsconfig.json` exists in `PROJECT_ROOT`. If so, add `--ts-config tsconfig.json` to all madge commands.
+5. **Determine entry point**: Use the target path from the user's request. If none specified, use `src/` if it exists, otherwise `.`.
+6. **Run circular dependency check**:
+   ```bash
+   # Without TypeScript:
+   npx madge --circular --json [entry-point]
+
+   # With TypeScript:
+   npx madge --circular --json --ts-config tsconfig.json [entry-point]
+   ```
+7. **Parse JSON output**: The result is an array of cycles. Each cycle is an array of file paths where the last file imports the first.
+   - Empty array `[]` = no circular dependencies
+   - Non-empty = circular dependencies found (exit code 1 is expected)
+8. **Optionally check orphans**: If the user asked about orphan modules, or as part of a comprehensive analysis:
+   ```bash
+   npx madge --orphans [entry-point]
+   ```
+   This outputs file paths to stdout (one per line, not JSON).
+9. **Normalize severity**:
+   - Circular dependency → **[CRT] CRITICAL** (can cause runtime crashes from Temporal Dead Zone errors, breaks tree-shaking, signals tight coupling)
+   - Orphan module → **[INF] INFO** (dead code, not harmful but indicates unused files)
+10. **Present findings**: Use the output format below.
+
+### Example Output
+
+```
+## Dependency Analysis Report
+
+**Tool**: madge | **Entry point**: src/ | **TypeScript**: yes
+
+### Circular Dependencies — 2 cycles found [CRT]
+
+**Cycle 1** (2 modules):
+  src/orders/index.ts → src/orders/validate.ts → src/orders/index.ts
+
+**Cycle 2** (3 modules):
+  src/auth/session.ts → src/auth/tokens.ts → src/auth/refresh.ts → src/auth/session.ts
+
+### Suggested Fixes
+
+**Cycle 1**: `orders/validate.ts` imports from `orders/index.ts` — likely to access
+a shared type or constant. Extract the shared dependency into a separate file
+(e.g., `orders/types.ts`) that both can import without creating a cycle.
+
+**Cycle 2**: This 3-module cycle suggests the auth module has tightly coupled
+responsibilities. Consider extracting token refresh logic into a standalone
+module that doesn't depend on session management.
+```
+
+### Clean Result
+
+```
+## Dependency Analysis Report
+
+**Tool**: madge | **Entry point**: src/ | **TypeScript**: yes
+
+No circular dependencies found. Module structure looks clean.
+```
+
+### Orphan Modules (when requested)
+
+```
+### Orphan Modules — 2 files [INF]
+
+These files are not imported by any other module:
+- src/utils/deprecated.ts
+- src/helpers/old-format.ts
+
+Consider removing them if they are unused, or adding imports if they were accidentally disconnected.
+```
+
+**Important**: Always provide actionable refactoring suggestions for circular dependencies. The fix is almost always to extract a shared dependency into a separate module. Do not suggest "just remove the import" without explaining where it should go instead.
+
 ## Output Format
 
 ### Summary Header
@@ -341,3 +428,4 @@ Load these as needed based on the detected tool:
 | `<skill-dir>/references/eslint.md` | When TOOL=eslint — CLI flags, output schema, common rules |
 | `<skill-dir>/references/biome.md` | When TOOL=biome — CLI flags, output schema, categories |
 | `<skill-dir>/references/ruff.md` | When TOOL=ruff — CLI flags, output schema, rule prefixes |
+| `<skill-dir>/references/madge.md` | Workflow F (dependency analysis) — CLI flags, output schema |
