@@ -81,9 +81,10 @@ When presenting findings, use the tag prefix:
 
 Group findings by severity (BLOCKER first), then by file, then by line number.
 
-## Madge (Dependency Analysis)
+## Dependency Analysis (madge / pydeps)
 
 | Finding | Normalized | Rationale |
 |---------|------------|-----------|
-| Circular dependency | CRITICAL | Can cause runtime crashes (TDZ errors), breaks tree-shaking, signals tight coupling |
+| Circular dependency (JS/TS) | CRITICAL | Runtime TDZ crashes, breaks tree-shaking, signals tight coupling |
+| Circular dependency (Python) | CRITICAL | `ImportError` at runtime, signals tight coupling between modules |
 | Orphan module | INFO | Dead code — not harmful but indicates unused files |

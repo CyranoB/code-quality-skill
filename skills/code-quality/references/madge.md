@@ -2,7 +2,7 @@
 
 Madge creates dependency graphs from JS/TS modules and detects circular dependencies.
 
-**JavaScript/TypeScript only.** For Python circular import detection, no zero-install equivalent exists yet.
+**JavaScript/TypeScript only.** For Python, see `pydeps.md`.
 
 ## CLI Usage
 
