@@ -118,6 +118,34 @@ When `@typescript-eslint` is installed:
 
 If `ruleId` is `null` and the message starts with "Parsing error:", the file has a syntax error. Report these as BLOCKER severity — they prevent all other analysis.
 
+## Cyclomatic Complexity
+
+ESLint's built-in `complexity` rule reports functions exceeding a max branch count.
+
+**Not enabled by default** — must be configured:
+
+```js
+// eslint.config.js
+rules: { "complexity": ["warn", 10] }   // warn at 10 (ESLint default)
+rules: { "complexity": ["error", 15] }  // error at 15
+```
+
+**JSON output** (from `--format json`):
+
+```json
+{
+  "ruleId": "complexity",
+  "severity": 1,
+  "message": "Function 'processOrder' has a complexity of 18. Maximum allowed is 10.",
+  "line": 42,
+  "column": 1
+}
+```
+
+**Thresholds**: 1–10 simple, 11–20 moderate, 21+ high risk. ESLint default max is 10.
+
+**Severity mapping**: Apply normal ESLint mapping — `error` (severity 2) → CRITICAL, `warning` (severity 1) → MAJOR.
+
 ## Tips
 
 - Use `--no-warn-ignored` to suppress warnings about ignored files (ESLint 9+)

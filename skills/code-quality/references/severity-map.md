@@ -21,6 +21,8 @@ Normalize tool-native severity levels to a unified 5-tier system for consistent 
 
 ESLint has only two levels. Map `error` → CRITICAL, `warning` → MAJOR.
 
+The `complexity` rule follows normal ESLint mapping: configured as `"error"` → CRITICAL, configured as `"warn"` → MAJOR.
+
 ## Biome
 
 | Native Severity | Normalized |
@@ -39,6 +41,7 @@ Map by rule code prefix:
 | F      | Pyflakes         | CRITICAL   |
 | E      | pycodestyle error| CRITICAL   |
 | W      | pycodestyle warn | MAJOR      |
+| C901   | mccabe complexity| MAJOR      | ← specific override; takes precedence over generic C
 | C      | Convention       | MINOR      |
 | I      | isort            | INFO       |
 | N      | pep8-naming      | MINOR      |

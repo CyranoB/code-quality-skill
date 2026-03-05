@@ -1,0 +1,32 @@
+# Default ruff configuration for the code-quality skill
+# Used when no project-level ruff config is found
+# Inspired by SonarQube "Sonar way" quality profile
+#
+# To override: create a ruff.toml or pyproject.toml [tool.ruff] in your project
+
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = [
+  "E",    # pycodestyle errors — style violations (line length, whitespace, etc.)
+  "F",    # pyflakes — undefined names, unused imports/variables
+  "W",    # pycodestyle warnings — minor style issues
+  "C90",  # mccabe — cyclomatic complexity
+  "I",    # isort — import sorting
+  "N",    # pep8-naming — naming conventions (snake_case, UPPER_CASE, etc.)
+  "UP",   # pyupgrade — suggest modern Python syntax
+  "B",    # flake8-bugbear — likely bugs and design problems
+  "S",    # flake8-bandit — security issues (hardcoded passwords, exec, etc.)
+  "SIM",  # flake8-simplify — simplifiable code patterns
+  "T20",  # flake8-print — print() statements left in code
+]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.per-file-ignores]
+# Allow assert in tests, print in scripts
+"tests/**/*.py" = ["S101"]
+"test/**/*.py" = ["S101"]
+"scripts/**/*.py" = ["T20"]

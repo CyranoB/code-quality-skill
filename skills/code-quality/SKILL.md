@@ -7,6 +7,8 @@ description: >-
   "check before commit", "run static analysis", "find bugs", "clean up this code",
   or "pre-commit check". Also triggers when mentioning ESLint, ruff, Biome, or
   code quality issues like unused variables, type errors, or style violations.
+  Also triggers on "cyclomatic complexity", "check complexity", "find complex
+  functions", "complexity analysis", "too complex", or "hard to test".
 ---
 
 # Code Quality Skill
@@ -44,14 +46,8 @@ This outputs key=value pairs. Parse these values:
 
 **If TOOL=none and LANGUAGE=unknown**: No supported language detected. Tell the user the skill doesn't support this project type yet.
 
-**If TOOL=none and LANGUAGE=javascript**: JS/TS files are present but no linter is configured or installed. ESLint 9+ requires an explicit config file and will not run without one. Suggest setup:
-- Quick start: `npm init @eslint/config@latest` (interactive setup)
-- Or install Biome: `npm install --save-dev @biomejs/biome && npx @biomejs/biome init`
-- Then re-run the analysis.
-
-**If TOOL=none and LANGUAGE=python**: Python files are present but no linter configured. The fallback normally uses `uvx ruff` which works without config — if this was reached, something unexpected happened.
-
-**If FALLBACK=true**: Inform the user that no explicit linter config was found and the tool is running with default settings. Suggest they create a config for customized rules.
+**If FALLBACK=true**: The skill's built-in default config is being used (see "Default Configs" below). This is normal and the analysis will work out of the box. Inform the user:
+> "No linter config found in your project. Running with the skill's built-in defaults (SonarQube-inspired rules). To customize, create your own config file."
 
 **If TOOL=npm-script**: The project has a custom lint script but no recognized linter config for JSON output. Run the `COMMAND` (e.g., `npm run lint`) and parse the human-readable text output instead. Look for patterns like `file:line:col: message` or ESLint/Biome-style output. If the output is unstructured, present it verbatim and let the user interpret it.
 
@@ -63,6 +59,26 @@ After detection, load the matching reference file from `<skill-dir>/references/`
 - `TOOL=ruff` → read `<skill-dir>/references/ruff.md`
 
 Only load `<skill-dir>/references/severity-map.md` when the linter reports issues (not on clean results — saves tokens).
+
+## Default Configs
+
+The skill ships with built-in configs in `<skill-dir>/defaults/` so analysis works out of the box — no project setup required. Inspired by SonarQube's "Sonar way" quality profile.
+
+When no project-level config is found (`FALLBACK=true`), the detect script automatically uses these defaults via `--config` flags. The developer doesn't need to configure anything.
+
+### Python — `defaults/ruff.toml`
+
+Rules enabled: `E` (pycodestyle errors), `F` (pyflakes), `W` (pycodestyle warnings), `C90` (cyclomatic complexity), `I` (import sorting), `N` (naming), `UP` (pyupgrade), `B` (bugbear), `S` (security/bandit), `SIM` (simplify), `T20` (print statements). Complexity threshold: 10. Runs via `uvx ruff` — zero install needed.
+
+### JavaScript/TypeScript — `defaults/eslint.config.js`
+
+Core ESLint rules only (no plugins required): error detection (`no-unused-vars`, `no-undef`, `no-unreachable`), best practices (`eqeqeq`, `prefer-const`, `no-var`), cyclomatic complexity (threshold 10), security (`no-eval`), debug artifacts (`no-console`, `no-debugger`). Requires ESLint to be available via `npx`.
+
+### When to suggest project-level config
+
+After presenting results with defaults, add: "These results use the skill's built-in rules. To customize (adjust severity, disable rules, add plugins), create your own config:" and suggest:
+- **ruff**: `ruff.toml` or `[tool.ruff]` in `pyproject.toml`
+- **ESLint**: `npm init @eslint/config@latest`
 
 ## Workflow A: Review File or Code
 
@@ -82,6 +98,7 @@ Only load `<skill-dir>/references/severity-map.md` when the linter reports issue
 4. **Handle exit codes**: Exit code 1 means issues were found (expected). Exit code 2 means a config or runtime error — report this to the user.
 5. **Parse JSON output**: Extract file path, line, column, rule, message, severity from each finding.
 6. **Normalize severity**: Map tool-native severity to the unified scale using `references/severity-map.md`.
+   - Cyclomatic complexity violations (ESLint `complexity` rule, ruff `C901`) always map to **[MAJ] MAJOR** regardless of raw tool severity. High complexity predicts bugs and poor testability. Include the measured complexity vs. the configured threshold in the message (e.g., "complexity 15 > max 10"). C901 has no auto-fix — suggest manual refactoring (extract sub-functions, simplify conditionals, use early returns).
 7. **Present findings**: Use the output format below. For MAJOR and above, include a brief explanation of why it matters and suggest a fix.
 
 If no issues are found, report a clean result.
@@ -154,6 +171,94 @@ Offer follow-up actions: "I can fix the N auto-fixable issues, or drill into a s
    - **PASS**: "All changed files pass lint checks. Ready to commit."
    - **FAIL**: Show issues in changed files only, with severity and suggested fixes
 
+## Workflow E: Complexity Analysis
+
+**Triggers**: "check complexity", "find complex functions", "cyclomatic complexity", "complexity analysis", "too complex", "hard to test"
+
+This workflow runs **with built-in defaults** — no project configuration required. The skill injects complexity rules via CLI flags so it works even when the project has no complexity rules configured. Inspired by SonarQube's default quality gate, which ships with complexity checks enabled out of the box.
+
+### Default Threshold
+
+| Metric | Max | Rationale |
+|--------|-----|-----------|
+| Cyclomatic complexity | **10** | Industry standard; matches ESLint and ruff defaults. SonarQube uses 15 for cognitive complexity — cyclomatic 10 is the equivalent bar. |
+
+Functions at or below 10 are manageable. 11–20 = moderate risk. 21+ = high risk, should be refactored.
+
+### Steps
+
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `TOOL` and `LANGUAGE`.
+2. **Construct complexity command**: Do **not** use the generic `COMMAND`. Build a complexity-specific command based on the detected `TOOL` and `LANGUAGE`:
+
+   **TOOL=ruff** (configured):
+   ```bash
+   ruff check --select C901 --output-format json [files...]
+   ```
+
+   **TOOL=eslint** (configured):
+   ```bash
+   npx eslint --rule '{"complexity": ["warn", 10]}' --format json [files...]
+   ```
+
+   **TOOL=biome**: Biome has no cyclomatic complexity rule. Inform the user: "Biome does not support complexity analysis. Consider adding ESLint alongside Biome for complexity checks, or switch to ruff for Python projects."
+
+   **TOOL=pylint**: Pylint does not include mccabe by default. Fall back to ruff:
+   ```bash
+   uvx ruff check --select C901 --output-format json [files...]
+   ```
+
+   **TOOL=none, LANGUAGE=python**: Use ruff via uvx (works with zero project setup):
+   ```bash
+   uvx ruff check --select C901 --output-format json [files...]
+   ```
+
+   **TOOL=none, LANGUAGE=javascript**: ESLint requires a config file (ESLint 9+). Suggest: "Run `npm init @eslint/config@latest` to set up ESLint, then re-run complexity analysis."
+
+   **TOOL=npm-script**: Try ESLint directly (may already be installed as a dependency):
+   ```bash
+   npx eslint --rule '{"complexity": ["warn", 10]}' --format json [files...]
+   ```
+   If this fails with exit code 2 (no config), suggest ESLint setup.
+
+3. **Run the command**: Execute on the target files/directory.
+4. **Parse and normalize**: Extract function name, measured complexity, and threshold from each finding. Map **all** complexity violations to **[MAJ] MAJOR** regardless of raw tool severity.
+5. **Present findings**: Use the output format below. For each violation, include:
+   - Function name and location
+   - Measured complexity vs. threshold (e.g., "complexity 15 > max 10")
+   - Actionable refactoring suggestion (extract helper functions, simplify conditionals, use early returns, replace nested if/else with guard clauses)
+
+### Example Output
+
+```
+## Complexity Analysis Report
+
+**Tool**: ruff (C901) | **Threshold**: 10 | **Files scanned**: 12
+
+| File | Line | Function | Complexity | Severity |
+|------|------|----------|------------|----------|
+| src/orders.py | 23 | process_order | 18 | [MAJ] |
+| src/auth.py | 45 | validate_token | 12 | [MAJ] |
+
+**src/orders.py:23** (`process_order`, complexity 18):
+This function has nearly twice the recommended complexity. Consider extracting
+the discount calculation and inventory check into separate functions.
+
+**src/auth.py:45** (`validate_token`, complexity 12):
+Slightly above threshold. Simplify by using early returns for invalid cases.
+```
+
+### Clean Result
+
+```
+## Complexity Analysis Report
+
+**Tool**: ruff (C901) | **Threshold**: 10 | **Files scanned**: 12
+
+No functions exceed the complexity threshold. Code is well-structured.
+```
+
+**Important**: Complexity violations have no auto-fix. Always provide manual refactoring suggestions. Do not offer to run `--fix`.
+
 ## Output Format
 
 ### Summary Header
@@ -210,22 +315,12 @@ No issues found. Code looks clean.
 
 ## Error Handling
 
-### Tool not installed or not configured
+### Tool not installed
 
-If the linter command fails with "command not found", or ESLint fails with "couldn't find an eslint.config" (exit code 2):
-- **eslint**: `npm init @eslint/config@latest` (ESLint 9+ requires a config file — there is no default-rules mode)
+If the linter command fails with "command not found":
+- **ruff**: `uvx ruff` runs without installation (requires `uv`). If `uv` is missing: `pip install ruff`
+- **eslint**: `npm install --save-dev eslint` (the skill provides a default config, but ESLint itself must be available via `npx`)
 - **biome**: `npm install --save-dev @biomejs/biome && npx @biomejs/biome init`
-- **ruff**: `pip install ruff` or use `uvx ruff` (works without config, has sensible defaults)
-
-### No config file
-
-If `FALLBACK=true`, inform the user:
-> "No ESLint/Biome/ruff config found. Running with default rules. For customized analysis, create a config file."
-
-Suggest init commands:
-- **eslint**: `npx eslint --init` or create `eslint.config.js`
-- **biome**: `npx @biomejs/biome init`
-- **ruff**: Create `ruff.toml` or add `[tool.ruff]` to `pyproject.toml`
 
 ### Large output
 

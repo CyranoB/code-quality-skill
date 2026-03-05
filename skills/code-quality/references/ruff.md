@@ -142,6 +142,41 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
 | UP035 | Deprecated import |
 | SIM108 | Use ternary instead of if/else |
 
+## Cyclomatic Complexity (C90 / mccabe)
+
+Ruff's C90 prefix implements the `mccabe` complexity checker.
+
+**Enable in config**:
+
+```toml
+# ruff.toml or pyproject.toml [tool.ruff]
+select = ["C90"]
+[lint.mccabe]
+max-complexity = 10   # default; lower = stricter
+```
+
+**Or run ad-hoc**:
+
+```bash
+ruff check --select C901 path/to/file.py
+```
+
+**Only rule**: `C901` — `function-is-too-complex`
+
+**JSON output**:
+
+```json
+{
+  "code": "C901",
+  "message": "process_order is too complex (15 > 10)",
+  "filename": "src/orders.py",
+  "location": { "row": 23, "column": 0 },
+  "fix": null
+}
+```
+
+**Note**: C901 has no auto-fix. Suggest manual refactoring: extract sub-functions, simplify conditionals, use early returns.
+
 ## Tips
 
 - Ruff is written in Rust and is 10-100x faster than flake8/pylint

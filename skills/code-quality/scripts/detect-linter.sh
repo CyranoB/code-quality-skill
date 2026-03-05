@@ -4,6 +4,11 @@
 
 set -euo pipefail
 
+# Resolve skill directory paths for default configs
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
+DEFAULTS_DIR="$SKILL_DIR/defaults"
+
 # --- Help ---
 if [[ "${1:-}" == "--help" ]]; then
   cat <<'USAGE'
@@ -198,15 +203,14 @@ detect_javascript() {
   fi
 
   # 5. Fallback: JS/TS files present but no linter configured
-  # Do NOT suggest eslint — ESLint 9+ requires a config file and won't run without one.
-  # Report the language so the skill can suggest setup.
+  # Use the skill's default ESLint config so analysis works out of the box.
   if has_glob "*.js" || has_glob "*.ts" || has_glob "*.jsx" || has_glob "*.tsx" \
     || has_glob "src/*.js" || has_glob "src/*.ts" || has_glob "src/*.tsx" || has_glob "src/*.jsx" \
     || has_glob "lib/*.js" || has_glob "lib/*.ts" || has_glob "app/*.js" || has_glob "app/*.ts"; then
-    echo "TOOL=none"
-    echo "COMMAND="
-    echo "FIX_COMMAND="
-    echo "CONFIG="
+    echo "TOOL=eslint"
+    echo "COMMAND=npx eslint --config $DEFAULTS_DIR/eslint.config.js --format json"
+    echo "FIX_COMMAND=npx eslint --config $DEFAULTS_DIR/eslint.config.js --fix"
+    echo "CONFIG=$DEFAULTS_DIR/eslint.config.js"
     echo "LANGUAGE=javascript"
     echo "FALLBACK=true"
     return 0
@@ -256,14 +260,15 @@ detect_python() {
   fi
 
   # 4. Fallback: .py files present (check common project layouts)
+  # Use the skill's default ruff config for comprehensive analysis out of the box.
   # Include src/*/*.py for standard Python src layout (src/package_name/*.py)
   if has_glob "*.py" || has_glob "src/*.py" || has_glob "src/*/*.py" \
     || has_glob "app/*.py" || has_glob "app/*/*.py" \
     || has_glob "lib/*.py" || has_glob "tests/*.py" || has_glob "test/*.py"; then
     echo "TOOL=ruff"
-    echo "COMMAND=uvx ruff check --output-format json"
-    echo "FIX_COMMAND=uvx ruff check --fix"
-    echo "CONFIG="
+    echo "COMMAND=uvx ruff check --config $DEFAULTS_DIR/ruff.toml --output-format json"
+    echo "FIX_COMMAND=uvx ruff check --config $DEFAULTS_DIR/ruff.toml --fix"
+    echo "CONFIG=$DEFAULTS_DIR/ruff.toml"
     echo "LANGUAGE=python"
     echo "FALLBACK=true"
     return 0
