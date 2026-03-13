@@ -16,14 +16,16 @@ Usage: detect-linter.sh [project-path] [--changed-only]
 
 Auto-detects the linter for a project and outputs key=value pairs:
 
-  TOOL          - Linter name (eslint, biome, ruff, pylint, npm-script)
-  COMMAND       - Full command to run analysis with JSON output
-  FIX_COMMAND   - Full command to auto-fix issues
-  CONFIG        - Path to detected config file (empty if fallback)
-  LANGUAGE      - Primary language (javascript, python)
-  FALLBACK      - "true" if no explicit config found
-  PROJECT_ROOT  - Detected project root directory
-  FILES         - Space-separated file list (only with --changed-only)
+  TOOL              - Linter name (eslint, biome, ruff, pylint, npm-script)
+  COMMAND           - Full command to run analysis with JSON output
+  FIX_COMMAND       - Full command to auto-fix issues
+  CONFIG            - Path to detected config file (empty if fallback)
+  LANGUAGE          - Primary language (javascript, python)
+  FALLBACK          - "true" if no explicit config found
+  PROJECT_ROOT      - Detected project root directory
+  FILES             - Space-separated file list (only with --changed-only)
+  TYPE_CHECKER      - Type checker (pyright, tsc, none)
+  TYPE_CHECK_COMMAND - Full command to run type checking
 
 Options:
   --changed-only  Only list files changed in git (staged + unstaged)
@@ -279,6 +281,40 @@ detect_python() {
   return 1
 }
 
+# --- Type Checker Detection ---
+detect_type_checker() {
+  local lang="$1"
+
+  case "$lang" in
+    python)
+      # Check for explicit pyright config
+      if has_file "pyrightconfig.json" || pyproject_has_section "tool.pyright"; then
+        echo "TYPE_CHECKER=pyright"
+        echo "TYPE_CHECK_COMMAND=npx pyright --outputjson"
+        return 0
+      fi
+      # Fallback: pyright works zero-config on any Python project
+      echo "TYPE_CHECKER=pyright"
+      echo "TYPE_CHECK_COMMAND=npx pyright --outputjson"
+      ;;
+    javascript)
+      # TypeScript projects have tsconfig.json
+      if has_file "tsconfig.json"; then
+        echo "TYPE_CHECKER=tsc"
+        echo "TYPE_CHECK_COMMAND=npx tsc --noEmit"
+        return 0
+      fi
+      # Plain JS without TypeScript — no type checker
+      echo "TYPE_CHECKER=none"
+      echo "TYPE_CHECK_COMMAND="
+      ;;
+    *)
+      echo "TYPE_CHECKER=none"
+      echo "TYPE_CHECK_COMMAND="
+      ;;
+  esac
+}
+
 # --- Main ---
 # Capture output and exit code in a single call (avoid running detection twice)
 OUTPUT=""
@@ -294,12 +330,19 @@ else
   echo "LANGUAGE=unknown"
   echo "FALLBACK=true"
   echo "PROJECT_ROOT=$PROJECT_ROOT"
+  echo "TYPE_CHECKER=none"
+  echo "TYPE_CHECK_COMMAND="
   echo "FILES="
   exit 1
 fi
 
 echo "$OUTPUT"
 echo "PROJECT_ROOT=$PROJECT_ROOT"
+
+# Detect type checker based on language
+LANG_LINE="$(echo "$OUTPUT" | grep "^LANGUAGE=")"
+DETECTED_LANG="${LANG_LINE#LANGUAGE=}"
+detect_type_checker "$DETECTED_LANG"
 
 # Changed files
 if [[ "$CHANGED_ONLY" == "true" ]]; then

@@ -14,17 +14,22 @@ description: >-
   modules".
   Also triggers on "set up linting", "configure eslint", "configure ruff",
   "add a linter", "set up code quality", "init eslint", or "set up biome".
+  Also triggers on "type check", "verify types", "run pyright", "run tsc",
+  "type errors", "check types", "verify code", "pyright", "static type
+  analysis", or "type safety".
 ---
 
 # Code Quality Skill
 
-Analyze and fix code quality issues using the project's own linting tools. This skill detects the project's linter (ESLint, Biome, or ruff), runs it with JSON output, normalizes the results into a consistent severity format, and presents actionable findings.
+Analyze, verify, and fix code quality issues using the project's own tools. This skill detects the project's linter and type checker, runs them with structured output, normalizes the results into a consistent severity format, and presents actionable findings.
 
 **Core principle**: Use what the project already has. No external services, no server setup, no token overhead when not in use.
 
 **Supported tools**:
-- **JavaScript/TypeScript**: ESLint, Biome
-- **Python**: ruff
+- **JavaScript/TypeScript linting**: ESLint, Biome
+- **Python linting**: ruff
+- **Python type checking**: pyright
+- **TypeScript type checking**: tsc
 
 ## Step 1: Detect the Project's Linter
 
@@ -176,9 +181,12 @@ Offer follow-up actions: "I can fix the N auto-fixable issues, drill into a spec
    # Example for ruff:
    ruff check --output-format json file1.py file2.py
    ```
-4. **Present pass/fail verdict**:
-   - **PASS**: "All changed files pass lint checks. Ready to commit."
-   - **FAIL**: Show issues in changed files only, with severity and suggested fixes
+4. **Run type checker on changed files** (if `TYPE_CHECKER` is not `none`):
+   - **pyright**: `npx pyright --outputjson file1.py file2.py`
+   - **tsc**: `npx tsc --noEmit` (full project, then filter diagnostics to changed files)
+5. **Present pass/fail verdict**:
+   - **PASS**: "All changed files pass lint and type checks. Ready to commit."
+   - **FAIL**: Show issues in changed files only, with severity and suggested fixes. Include both lint and type errors.
 
 ## Workflow E: Complexity Analysis
 
@@ -489,6 +497,136 @@ Created: eslint.config.js (based on typescript-eslint recommended rules + comple
 Want me to run an initial code quality audit?
 ```
 
+## Workflow H: Type Checking
+
+**Triggers**: "type check", "verify types", "run pyright", "run tsc", "type errors", "check types", "verify code", "static type analysis"
+
+Runs static type checking to catch type errors, missing attributes, incorrect function signatures, and other issues that linters miss. Linters catch style and pattern issues; type checkers catch correctness issues — code that will fail at runtime due to type mismatches.
+
+**Supported tools**:
+- **Python**: pyright (via `npx pyright` — zero install, fast, works on untyped code too)
+- **TypeScript**: tsc (the TypeScript compiler in check-only mode)
+
+### Steps
+
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE`, `PROJECT_ROOT`, `TYPE_CHECKER`, and `TYPE_CHECK_COMMAND`.
+2. **Check TYPE_CHECKER**: If `TYPE_CHECKER=none`, inform the user:
+   > "Type checking is available for Python (pyright) and TypeScript (tsc) projects. This project appears to be plain JavaScript without TypeScript. To enable type checking, add a `tsconfig.json` with `npx tsc --init`."
+3. **Load reference** based on `TYPE_CHECKER`:
+   - `pyright` → read `<skill-dir>/references/pyright.md`
+4. **Run type checker**: Execute `TYPE_CHECK_COMMAND` on the target.
+
+   **Python (pyright)**:
+   ```bash
+   npx pyright --outputjson [files-or-directory]
+   ```
+   If the user targets specific files, pass them as arguments. If targeting a directory or whole project, run without file arguments (pyright uses `pyrightconfig.json` or defaults to the current directory).
+
+   **TypeScript (tsc)**:
+   ```bash
+   npx tsc --noEmit
+   ```
+   tsc uses the project's `tsconfig.json`. It doesn't support targeting individual files when a tsconfig exists — run on the whole project and filter results to the user's target files when presenting output.
+
+5. **Handle exit codes**: Exit code 1 means type errors were found (expected — parse the output). Do NOT treat it as a command failure.
+
+6. **Parse output**:
+
+   **Pyright JSON** (`--outputjson`): Parse the `generalDiagnostics` array. Each entry has `file`, `severity`, `message`, `range`, `rule`. **Line numbers are 0-based** — add 1 when displaying.
+
+   **tsc text output**: Parse lines matching the pattern:
+   ```
+   file(line,col): error TSxxxx: message
+   file(line,col): warning TSxxxx: message
+   ```
+   Extract file path, line number, column, error code, and message.
+
+7. **Normalize severity**: Load `<skill-dir>/references/severity-map.md` if issues are found.
+   - pyright `error` → **[CRT] CRITICAL**
+   - pyright `warning` → **[MAJ] MAJOR**
+   - pyright `information` → **[MIN] MINOR**
+   - tsc `error` → **[CRT] CRITICAL**
+   - tsc `warning` → **[MAJ] MAJOR**
+
+8. **Present findings**: Use the output format below. For each type error, explain what the mismatch is and suggest a concrete fix (add a type annotation, convert a value, add a None check, etc.).
+
+### Filtering noise
+
+Pyright can be noisy on projects with few type annotations or many untyped third-party dependencies. Apply these filters:
+
+- **reportMissingTypeStubs**: If many `reportMissingTypeStubs` warnings appear (untyped third-party packages), group them into a single summary line instead of listing each one: "N third-party packages lack type stubs (e.g., `requests`, `flask`). Install stubs with `pip install types-requests` or suppress with `reportMissingTypeStubs = false` in pyrightconfig.json."
+- **Large output**: If more than 50 diagnostics, show the top 50 by severity and note the total count.
+
+### Pre-commit integration
+
+When the user runs Workflow D (pre-commit check) and `TYPE_CHECKER` is not `none`, also run type checking on the changed files and include results in the pre-commit verdict. Type errors should block the commit recommendation just like lint errors.
+
+For pyright, pass the changed files directly:
+```bash
+npx pyright --outputjson file1.py file2.py
+```
+
+For tsc, run `npx tsc --noEmit` (full project) and filter diagnostics to only the changed files.
+
+### Example Output (Python)
+
+```
+## Type Check Report
+
+**Tool**: pyright | **Files analyzed**: 15 | **Python version**: 3.11
+
+| Severity | Count |
+|----------|-------|
+| [CRT] CRITICAL | 3 |
+| [MAJ] MAJOR | 1 |
+| **Total** | **4** |
+
+### src/orders.py
+
+| Line | Severity | Rule | Message |
+|------|----------|------|---------|
+| 23 | [CRT] | reportAttributeAccessIssue | Cannot access attribute "total" for class "Order" |
+| 45 | [CRT] | reportArgumentType | Argument of type "str" cannot be assigned to parameter "count" of type "int" |
+
+**Line 23**: The `Order` class doesn't have a `total` attribute. Check the class definition — you might mean `order_total` or need to add the attribute.
+
+**Line 45**: Passing a string where an integer is expected. Add `int()` conversion or fix the caller.
+```
+
+### Example Output (TypeScript)
+
+```
+## Type Check Report
+
+**Tool**: tsc | **Config**: tsconfig.json | **Files analyzed**: 22
+
+| Severity | Count |
+|----------|-------|
+| [CRT] CRITICAL | 2 |
+| **Total** | **2** |
+
+### src/api/handler.ts
+
+| Line | Severity | Code | Message |
+|------|----------|------|---------|
+| 15 | [CRT] | TS2345 | Argument of type 'string' is not assignable to parameter of type 'number' |
+| 32 | [CRT] | TS2339 | Property 'name' does not exist on type 'Response' |
+
+**Line 15**: Type mismatch in function call. The function expects a `number` but receives a `string`. Convert with `Number(value)` or `parseInt(value)` or update the function signature.
+
+**Line 32**: The `Response` type doesn't have a `name` property. Check the type definition or use optional chaining if the property might not exist.
+```
+
+### Clean Result
+
+```
+## Type Check Report
+
+**Tool**: pyright | **Files analyzed**: 15 | **Python version**: 3.11
+
+No type errors found. Types look clean.
+```
+
 ## Output Format
 
 ### Summary Header
@@ -571,5 +709,6 @@ Load these as needed based on the detected tool:
 | `<skill-dir>/references/eslint.md` | When TOOL=eslint — CLI flags, output schema, common rules |
 | `<skill-dir>/references/biome.md` | When TOOL=biome — CLI flags, output schema, categories |
 | `<skill-dir>/references/ruff.md` | When TOOL=ruff — CLI flags, output schema, rule prefixes |
+| `<skill-dir>/references/pyright.md` | Workflow H, TYPE_CHECKER=pyright — CLI flags, JSON schema, common rules |
 | `<skill-dir>/references/madge.md` | Workflow F, JS/TS dependency analysis — CLI flags, output schema |
 | `<skill-dir>/references/pydeps.md` | Workflow F, Python dependency analysis — depcycle (primary), pydeps (graphs) |

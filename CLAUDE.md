@@ -26,6 +26,7 @@ skills/code-quality/
     ├── eslint.md         # ESLint CLI reference
     ├── biome.md          # Biome CLI reference
     ├── ruff.md           # Ruff CLI reference
+    ├── pyright.md        # Pyright CLI reference (Python type checking)
     ├── madge.md          # Madge (JS/TS dependency analysis)
     ├── pydeps.md         # Pydeps (Python dependency analysis)
     └── severity-map.md   # Severity normalization mapping
@@ -45,7 +46,8 @@ skills/code-quality/
 | A | Review file/code | ESLint, Biome, ruff |
 | B | Fix issues | ESLint --fix, ruff --fix, Biome --write |
 | C | Project audit | Same as A, full project scope |
-| D | Pre-commit check | Same as A, changed files only |
+| D | Pre-commit check | Linter + type checker on changed files |
 | E | Complexity analysis | ESLint complexity rule, ruff C901 |
 | F | Dependency analysis | madge (JS/TS), depcycle (Python) |
 | G | Linter setup | npm init @eslint/config, ruff.toml, biome init |
+| H | Type checking | pyright (Python), tsc (TypeScript) |

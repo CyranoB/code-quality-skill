@@ -81,6 +81,25 @@ When presenting findings, use the tag prefix:
 
 Group findings by severity (BLOCKER first), then by file, then by line number.
 
+## Pyright
+
+| Native Severity | Normalized |
+|-----------------|------------|
+| error           | CRITICAL   |
+| warning         | MAJOR      |
+| information     | MINOR      |
+
+Pyright's `severity` field in JSON output maps directly. Type errors (`error`) are definite bugs — they indicate code that will fail at runtime or violates declared type contracts.
+
+## TypeScript Compiler (tsc)
+
+| Native Severity | Normalized |
+|-----------------|------------|
+| error           | CRITICAL   |
+| warning         | MAJOR      |
+
+tsc output lines contain `error TSxxxx` or (rarely) `warning TSxxxx`. Type errors are CRITICAL because they indicate code that won't compile or has type mismatches.
+
 ## Dependency Analysis (madge / depcycle)
 
 | Finding | Normalized | Rationale |
