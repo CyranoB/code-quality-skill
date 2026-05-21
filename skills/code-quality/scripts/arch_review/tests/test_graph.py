@@ -18,7 +18,7 @@ def write_file(root: Path, relpath: str, content: str) -> None:
 class BuildPythonGraphTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self._tmp.name)
+        self.root = Path(self._tmp.name).resolve()
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -80,6 +80,57 @@ class BuildPythonGraphTest(unittest.TestCase):
         ok = str(self.root / "src/myapp/ok.py")
         self.assertIn(ok, graph)
         # Broken file is skipped silently — verify build did not crash.
+
+
+from arch_review.graph import detect_ts_entry_point, build_js_graph  # noqa: E402
+
+
+class DetectTSEntryPointTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name).resolve()
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_prefers_package_json_main(self) -> None:
+        write_file(self.root, "package.json", '{"main": "dist/index.js"}')
+        write_file(self.root, "src/index.ts", "")
+        write_file(self.root, "dist/index.js", "")
+        self.assertEqual(detect_ts_entry_point(self.root), self.root / "dist/index.js")
+
+    def test_falls_back_to_src_index_ts(self) -> None:
+        write_file(self.root, "src/index.ts", "")
+        self.assertEqual(detect_ts_entry_point(self.root), self.root / "src/index.ts")
+
+    def test_falls_back_to_src_server_ts(self) -> None:
+        write_file(self.root, "src/server.ts", "")
+        self.assertEqual(detect_ts_entry_point(self.root), self.root / "src/server.ts")
+
+    def test_returns_none_when_no_entry_point(self) -> None:
+        write_file(self.root, "README.md", "")
+        self.assertIsNone(detect_ts_entry_point(self.root))
+
+
+class BuildJsGraphTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name).resolve()
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_parses_madge_json_output(self) -> None:
+        from arch_review.graph import _parse_madge_json
+        payload = json.dumps({
+            "src/a.ts": ["src/b.ts"],
+            "src/b.ts": [],
+        })
+        graph = _parse_madge_json(payload, self.root)
+        a = str(self.root / "src/a.ts")
+        b = str(self.root / "src/b.ts")
+        self.assertEqual(graph[a], [b])
+        self.assertEqual(graph[b], [])
 
 
 if __name__ == "__main__":

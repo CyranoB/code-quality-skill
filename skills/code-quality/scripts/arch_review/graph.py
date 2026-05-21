@@ -156,6 +156,74 @@ def build_python_graph(root: Path, exclude_tests: bool = True) -> dict[str, list
     return graph
 
 
+TS_FALLBACK_ENTRIES = (
+    "src/index.ts", "src/index.tsx",
+    "src/server.ts", "src/main.ts", "src/app.ts",
+)
+
+
+def detect_ts_entry_point(root: Path) -> Path | None:
+    """Pick a TypeScript entry point for madge.
+
+    Priority: package.json main → package.json module → conventional src/ files.
+    Returns absolute path or None if nothing found.
+    """
+    root = Path(root)
+    pkg = root / "package.json"
+    if pkg.exists():
+        try:
+            data = json.loads(pkg.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+        for key in ("main", "module"):
+            value = data.get(key) if isinstance(data, dict) else None
+            if isinstance(value, str):
+                candidate = (root / value).resolve()
+                if candidate.exists():
+                    return candidate
+    for rel in TS_FALLBACK_ENTRIES:
+        candidate = root / rel
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _parse_madge_json(payload: str, root: Path) -> dict[str, list[str]]:
+    """Convert madge's relative-path JSON output to absolute-path adjacency dict."""
+    raw = json.loads(payload)
+    graph: dict[str, list[str]] = {}
+    for src, deps in raw.items():
+        src_abs = str((root / src).resolve())
+        graph[src_abs] = [str((root / d).resolve()) for d in deps]
+    return graph
+
+
 def build_js_graph(root: Path, exclude_tests: bool = True) -> dict[str, list[str]]:
-    """Placeholder — implemented in Task 4."""
-    raise NotImplementedError("build_js_graph lands in Task 4")
+    """Build JS/TS dependency graph via `npx madge --json`.
+
+    Returns: {file_path: [imported_file_paths, ...]}
+    Raises RuntimeError if madge cannot resolve an entry point or fails.
+    """
+    root = Path(root)
+    has_tsconfig = (root / "tsconfig.json").exists()
+    cmd: list[str] = ["npx", "--yes", "madge", "--json"]
+    if has_tsconfig:
+        entry = detect_ts_entry_point(root)
+        if entry is None:
+            raise RuntimeError(
+                "no detectable TypeScript entry point — add a `main` to "
+                "package.json or src/index.ts"
+            )
+        cmd += [
+            "--ts-config", str(root / "tsconfig.json"),
+            "--extensions", "ts,tsx",
+            str(entry),
+        ]
+    else:
+        cmd += [str(root / "src") if (root / "src").exists() else str(root)]
+    if exclude_tests:
+        cmd += ["--exclude", "(__tests__|\\.test\\.|\\.spec\\.|node_modules|dist|build|coverage)"]
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(root))
+    if proc.returncode not in (0, 1):
+        raise RuntimeError(f"madge failed: {proc.stderr.strip()}")
+    return _parse_madge_json(proc.stdout, root)
