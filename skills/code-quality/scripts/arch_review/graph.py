@@ -17,6 +17,7 @@ DEFAULT_EXCLUDES = {
     "node_modules", "dist", "build", ".next", "coverage",
     "__pycache__", ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache",
     "tests", "test", "__tests__", "migrations",
+    "fixtures",
 }
 TEST_FILE_PATTERNS = (
     "*_test.py", "test_*.py",
