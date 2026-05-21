@@ -22,7 +22,8 @@ Explicitly **not** in scope: pre-commit gating, CI enforcement, layered architec
 |---|---|
 | Languages | JavaScript / TypeScript + Python (same as the rest of the skill). |
 | Zero-config | No user config file. All layering / framework knowledge is heuristic. |
-| Zero-install (strict) | Only `npx <tool>` or `uvx <tool>` are acceptable. Otherwise we roll our own on top of dependency-graph data. |
+| Zero-install (third-party tools) | Third-party analysis tools must run via `npx <tool>` or `uvx <tool>` — no `pip install` / `npm install -g`. Otherwise we roll our own on top of dependency-graph data. |
+| Local runtimes (required) | `python3` is required on the host (used by the orchestrator package — treated like `bash` or `sh`, not a third-party install). `npx` required when analyzing JS/TS projects; `uvx` required when analyzing Python projects. Missing `python3` is a hard failure for this workflow. |
 | Output | Text-only structured report matching existing severity-table style. No diagrams in v1. |
 | Reporting model | Top-N findings, not pass/fail. Aligned with audit + onboarding use cases. |
 
@@ -37,8 +38,9 @@ skills/code-quality/
 ├── SKILL.md                            # MODIFIED: add Workflow I section
 ├── scripts/
 │   ├── detect-linter.sh                # MODIFIED: emit FRAMEWORK key
+│   ├── arch-review.sh                  # NEW: thin wrapper (sets PYTHONPATH, invokes package)
 │   └── arch_review/                    # NEW: orchestrator package (stdlib only)
-│       ├── __main__.py                 # CLI entry: `python3 -m arch_review …`
+│       ├── __main__.py                 # CLI entry — invoked via the wrapper, not directly
 │       ├── runner.py                   # Orchestration, parallel sub-checks, JSON output
 │       ├── graph.py                    # Dep-graph extraction (madge for JS/TS, ast for Python)
 │       ├── metrics.py                  # Ca/Ce/I, fan-in/out, deep chains (Tarjan-style)
@@ -51,13 +53,31 @@ skills/code-quality/
     └── vulture.md                      # NEW: vulture CLI reference (Python dead-code)
 ```
 
+### Wrapper script — `scripts/arch-review.sh`
+
+Thin shim so callers don't need to know about `PYTHONPATH`. The package directory is not on `sys.path` by default, so `python3 -m arch_review …` would fail with `No module named arch_review`. The wrapper sets the path once and forwards all arguments:
+
+```bash
+#!/usr/bin/env bash
+# Resolve the directory containing this script, then add it to PYTHONPATH so
+# `python3 -m arch_review` can find the package directly beneath it.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec env PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 -m arch_review "$@"
+```
+
+All Workflow I invocations (SKILL.md, tests, fixtures) call the wrapper:
+
+```bash
+bash <skill-dir>/scripts/arch-review.sh --project-root <path> --language <lang> --framework <framework>
+```
+
 ### Why a Python package, not a single bash script
 
 The metric math (Ca/Ce/I, graph traversal for deep chains, Tarjan SCC for cycles, LoC counting, layer inference with framework adjustments) is unwieldy in bash + jq and clean in stdlib Python. Splitting into a package keeps each module ~100–200 lines, independently testable, and avoids the irony of shipping a god module to detect god modules.
 
 ### Why `python3` is acceptable
 
-`python3` is universally present on macOS (system Python) and Linux (apt/yum default). The skill's existing tooling already assumes Python is reachable (`uvx`). No new install requirement for the user.
+The zero-install constraint applies to **third-party analysis tools** (the things we'd be asking users to add to their environment). `python3` is a host runtime — universally present on macOS (system Python) and Linux (apt/yum default), and the skill already assumes it indirectly via `uvx`. See the Constraints table for the explicit policy.
 
 ### Relationship to existing Workflow F
 
@@ -69,7 +89,7 @@ Ten sections, each ranked top-N (default 10), each mapping to the existing 5-tie
 
 | # | Section | Source | Watch / Alarm | Severity |
 |---|---|---|---|---|
-| 1 | Circular dependencies | Derived in-process from the dep graph (Tarjan SCC). Same upstream tools as Workflow F. | any cycle | `[CRT]` runtime, `[MAJ]` type-only |
+| 1 | Circular dependencies | Derived in-process from the dep graph (Tarjan SCC). Same upstream tools as Workflow F. | any cycle | `[CRT]` |
 | 2 | Layering violations | Heuristic layer inference + framework adjustment, then Dependency Rule check (inner→outer is a violation) | any violation | `[MAJ]` |
 | 3 | Hub modules (high Ca) | Graph metric — afferent coupling | Ca > 20 / > 50 | `[MIN]` / `[MAJ]` |
 | 4 | God modules (high Ce) | Graph metric — efferent coupling | Ce > 20 / > 50 | `[MIN]` / `[MAJ]` |
@@ -84,6 +104,7 @@ Ten sections, each ranked top-N (default 10), each mapping to the existing 5-tie
 
 - **Skipped: Abstractness (A) and Distance from Main Sequence (D)** — they require reliable abstract-vs-concrete classification of modules, which is unreliable in dynamic languages (Python, JS). The research surfaced this consensus.
 - **Skipped: LCOM (cohesion)** — too noisy for dynamic languages, same reason.
+- **Skipped: type-only TS cycle distinction** — `madge --json` does not preserve per-edge type-only metadata, so a cycle can't be reliably classified as "all edges are `import type`" from madge output alone. All cycles map to `[CRT]` in v1. Revisit in v1.1, potentially via `dependency-cruiser` which exposes edge-level dependency types.
 - **Section 8 is intentionally heuristic** — regex-based, will have false positives on barrel re-exports. Kept because it's a cheap signal and only `[MIN]`.
 
 ### Threshold rationale
@@ -100,7 +121,7 @@ SKILL.md Workflow I
   │
   ├─► detect-linter.sh                          # returns LANGUAGE, PROJECT_ROOT, FRAMEWORK
   │
-  ├─► python3 -m arch_review --project-root … --language … --framework …
+  ├─► bash <skill-dir>/scripts/arch-review.sh --project-root … --language … --framework …
   │     │
   │     ├─► graph.py: build full dependency graph
   │     │     ├─ JS/TS: subprocess `npx madge --json src/` (one call, full graph)
@@ -145,7 +166,7 @@ If multiple match, return the first match in this priority order: `nextjs > nest
 ### CLI surface
 
 ```
-python3 -m arch_review \
+bash <skill-dir>/scripts/arch-review.sh \
   --project-root <path> \
   --language python | javascript \
   --framework <name> \
@@ -226,11 +247,24 @@ Stable contract between `arch_review` and the SKILL.md renderer. Schema defined 
 
 ### JS/TS — single madge call
 
-```bash
-npx madge --json --ts-config tsconfig.json --extensions ts,tsx,js,jsx src/
-```
+Madge's resolution behavior differs by language, so `graph.py` selects the entry point at runtime to match Workflow F's existing guidance (see `references/madge.md`):
 
-Returns the full adjacency dict. Cycles are derived in-process using Tarjan's SCC. No separate `--circular` call is needed. Type-only cycles are flagged by parsing `import type` from the importer file (post-hoc check on findings).
+| Project | Command |
+|---|---|
+| Plain JS (no `tsconfig.json`) | `npx madge --json src/` — directory entry works fine. |
+| TypeScript (`tsconfig.json` present) | `npx madge --json --ts-config tsconfig.json --extensions ts,tsx src/index.ts` — must use a **file entry point**; passing `src/` alone often returns 0 files. |
+
+Entry-point selection for TS (in priority order, first match wins):
+
+1. `package.json` `main` field (resolved to absolute path)
+2. `package.json` `module` field
+3. `src/index.ts`, `src/index.tsx`
+4. `src/server.ts`, `src/main.ts`, `src/app.ts`
+5. If none found: skip graph-dependent sections (1–6) with reason "no detectable TypeScript entry point — pass one via `--entry <file>` or add a `main` to package.json".
+
+The same logic is used by Workflow F today; `graph.py` lifts it into a reusable helper so both workflows share it.
+
+Returns the full adjacency dict. Cycles are derived in-process using Tarjan's SCC. No separate `--circular` call is needed. Type-only cycles are not distinguished in v1 (see "Why these and not more" above).
 
 ### Python — stdlib AST walker
 
@@ -419,7 +453,7 @@ Per-section degradation — a failure in one sub-check never aborts the whole au
 - `clean-py/` — Python equivalent of clean.
 - `violations-py/` — Python equivalent with planted issues.
 
-Run via `python3 -m arch_review --project-root fixtures/<name>` and snapshot-compare the JSON.
+Run via `bash <skill-dir>/scripts/arch-review.sh --project-root fixtures/<name>` and snapshot-compare the JSON.
 
 ### Smoke tests — `scripts/arch_review/SMOKE.md` (manual)
 
@@ -452,5 +486,5 @@ None at design time. Surface during plan writing if any arise.
 
 ## References
 
-- Web research report: `.context/architecture-review-research.md` (full source list).
+- Web research report: `docs/superpowers/research/2026-05-21-architecture-review.md` (full source list, committed alongside this spec).
 - Existing skill design: `skills/code-quality/SKILL.md`, `skills/code-quality/scripts/detect-linter.sh`, `skills/code-quality/references/madge.md`, `skills/code-quality/references/pydeps.md`.
