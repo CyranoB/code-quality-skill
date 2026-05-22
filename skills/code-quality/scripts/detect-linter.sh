@@ -97,6 +97,46 @@ pyproject_has_section() {
   grep -qE "^\[${section//./\\.}\]" "$PROJECT_ROOT/pyproject.toml" 2>/dev/null
 }
 
+# Detect framework. Priority: nextjs > nestjs > django > fastapi > flask > express.
+# Used by Workflow I (architecture review).
+detect_framework() {
+  local root="$1"
+
+  if ls "$root"/next.config.{js,ts,mjs} >/dev/null 2>&1; then
+    echo "nextjs"
+    return
+  fi
+  if [ -f "$root/nest-cli.json" ]; then
+    echo "nestjs"
+    return
+  fi
+  if [ -f "$root/manage.py" ] && find "$root" -maxdepth 3 -name 'settings.py' -print -quit | grep -q .; then
+    echo "django"
+    return
+  fi
+  if [ -f "$root/pyproject.toml" ] && grep -qE '(^|[^a-zA-Z_])fastapi([^a-zA-Z_]|$)' "$root/pyproject.toml" 2>/dev/null; then
+    echo "fastapi"
+    return
+  fi
+  if [ -f "$root/requirements.txt" ] && grep -qE '^fastapi([=<>!~]|$)' "$root/requirements.txt" 2>/dev/null; then
+    echo "fastapi"
+    return
+  fi
+  if [ -f "$root/pyproject.toml" ] && grep -qE '(^|[^a-zA-Z_])flask([^a-zA-Z_]|$)' "$root/pyproject.toml" 2>/dev/null; then
+    echo "flask"
+    return
+  fi
+  if [ -f "$root/requirements.txt" ] && grep -qE '^flask([=<>!~]|$)' "$root/requirements.txt" 2>/dev/null; then
+    echo "flask"
+    return
+  fi
+  if [ -f "$root/package.json" ] && grep -q '"express"' "$root/package.json" 2>/dev/null; then
+    echo "express"
+    return
+  fi
+  echo "none"
+}
+
 # --- Changed files ---
 get_changed_files() {
   local exts="$1"
@@ -333,6 +373,7 @@ else
   echo "TYPE_CHECKER=none"
   echo "TYPE_CHECK_COMMAND="
   echo "FILES="
+  echo "FRAMEWORK=$(detect_framework "$PROJECT_ROOT")"
   exit 1
 fi
 
@@ -357,3 +398,6 @@ if [[ "$CHANGED_ONLY" == "true" ]]; then
 else
   echo "FILES="
 fi
+
+# Framework hint (used by Workflow I).
+echo "FRAMEWORK=$(detect_framework "$PROJECT_ROOT")"

@@ -17,6 +17,10 @@ description: >-
   Also triggers on "type check", "verify types", "run pyright", "run tsc",
   "type errors", "check types", "verify code", "pyright", "static type
   analysis", or "type safety".
+  Also triggers on "architecture review", "review architecture", "arch audit",
+  "find hub modules", "find god modules", "layering violations", "coupling
+  metrics", "module coupling", "instability", "show me the structure", or
+  "onboard me to this codebase".
 ---
 
 # Code Quality Skill
@@ -627,6 +631,128 @@ For tsc, run `npx tsc --noEmit` (full project) and filter diagnostics to only th
 No type errors found. Types look clean.
 ```
 
+## Workflow I: Architecture Review
+
+**Triggers**: "architecture review", "review architecture", "arch audit", "find god modules", "find hub modules", "layering violations", "coupling metrics", "instability", "module coupling", "show me the structure", "onboard me to this codebase"
+
+Produces a structured architecture report with ten sections — cycles, layering violations, hub/god modules, instability hotspots, deep import chains, oversized files, excessive exports, dead code, and complex functions. Designed for **on-demand audits + onboarding new developers** to an unfamiliar codebase. Not a pre-commit gate; findings are top-N, not pass/fail.
+
+### Steps
+
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE`, `PROJECT_ROOT`, and `FRAMEWORK`.
+2. **Run the orchestrator**:
+   ```bash
+   bash <skill-dir>/scripts/arch-review.sh \
+     --project-root "$PROJECT_ROOT" \
+     --language "$LANGUAGE" \
+     --framework "$FRAMEWORK"
+   ```
+   Useful flags:
+   - `--top N` (default 10) — findings per section
+   - `--include-tests` — opt in to scanning test files
+   - `--skip-section <name>` (repeatable) — drop a noisy section
+   - `--max-file-loc`, `--max-exports`, `--max-ca`, `--max-ce`, `--max-chain-depth` — threshold overrides
+3. **Load reference**: read `<skill-dir>/references/architecture.md` for the JSON schema, layer mapping, and severity thresholds.
+4. **Render the report**: parse the JSON and produce a markdown report using the format below.
+
+### Output format
+
+Render the report using the same severity-table style as Workflows A/C/E/F. Each non-clean section gets its own block; clean sections appear only in a one-line footer.
+
+#### Summary header
+
+```
+## Architecture Review Report
+
+**Language**: <lang> | **Framework**: <framework> | **Files scanned**: <N> | **Top-N**: <N>
+
+| Severity | Count |
+|----------|-------|
+| [CRT] CRITICAL | <count> |
+| [MAJ] MAJOR | <count> |
+| [MIN] MINOR | <count> |
+| [INF] INFO | <count> |
+| **Total** | **<sum>** |
+
+**Sections**: <N> run, <N> skipped (<list>)
+```
+
+#### Per-section block
+
+For each section with `status: "found"`, render a heading, a severity tag, a top-N table of findings, then prose explanations for `[MAJ]` and above. Examples:
+
+```
+### Layering Violations [MAJ] — <N> findings
+
+**Inferred layers** (heuristic + framework: <framework>):
+- presentation: <folder list>
+- application:  <folder list>
+- domain:       <folder list>
+- infrastructure: <folder list>
+
+| Violation | Importer | Imports |
+|-----------|----------|---------|
+| domain → infrastructure | src/domain/order.py:12 | src/db/session.py |
+
+**src/domain/order.py:12**: `domain` should not depend on `infrastructure`. Extract the persistence concern into a repository interface defined in `domain/` and inject the concrete implementation from `infrastructure/`.
+```
+
+```
+### Hub Modules [MAJ] — top N by fan-in (Ca)
+
+| File | Ca | Ce | I | Severity |
+|------|----|----|---|----------|
+
+**<file>** (Ca=N): N modules depend on this. Changes here ripple widely.
+```
+
+#### Clean sections footer
+
+```
+**Clean sections**: cycles, deep_chains, excessive_exports
+```
+
+#### Skipped sections
+
+```
+**Skipped**: dead_code (vulture not available — `pip install vulture` or install `uv`)
+```
+
+#### Onboarding hints (always include if any modules have Ca > 0)
+
+```
+### Onboarding hints
+
+Based on coupling metrics, the modules most central to understanding this codebase are:
+1. **<file with highest Ca>** — used everywhere; read this first
+2. **<second highest>**
+3. **<third highest>**
+```
+
+#### Followups (always include)
+
+```
+### Followups
+
+- Drill into a specific cycle: "show me cycle 1 in detail"
+- See all complex functions (not just top-N): "run complexity analysis"
+- Re-run including tests: "architecture review --include-tests"
+- Skip dead-code: "architecture review --skip dead_code"
+```
+
+### Error handling
+
+- If `detect-linter.sh` returns `LANGUAGE=unknown`: report "Architecture review supports Python and JS/TS projects. This project is not recognized."
+- If `python3` is not on PATH: report "Workflow I requires `python3` (universally available on macOS/Linux). Install via `brew install python` or `apt install python3`."
+- If a section has `status: "error"`: include it in the report with the underlying `reason` so the user understands why it failed. Other sections still render.
+- If a section has `status: "skipped"`: include it in the "Skipped" footer line with the `reason`.
+
+### Important
+
+- Findings are **not** errors. Always present a useful report even if many sections returned `found`.
+- Workflow F still exists as the focused cycles-only entry point. If the user just wants cycle detection, prefer F. Workflow I includes cycles as one of its ten sections.
+- After presenting the report, offer the follow-up actions verbatim — they are parseable by the user.
+
 ## Output Format
 
 ### Summary Header
@@ -712,3 +838,6 @@ Load these as needed based on the detected tool:
 | `<skill-dir>/references/pyright.md` | Workflow H, TYPE_CHECKER=pyright — CLI flags, JSON schema, common rules |
 | `<skill-dir>/references/madge.md` | Workflow F, JS/TS dependency analysis — CLI flags, output schema |
 | `<skill-dir>/references/pydeps.md` | Workflow F, Python dependency analysis — depcycle (primary), pydeps (graphs) |
+| `<skill-dir>/references/architecture.md` | Workflow I — layer mapping, framework rules, JSON schema |
+| `<skill-dir>/references/knip.md` | Workflow I, JS/TS dead-code section |
+| `<skill-dir>/references/vulture.md` | Workflow I, Python dead-code section |
