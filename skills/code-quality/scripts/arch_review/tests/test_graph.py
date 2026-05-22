@@ -71,6 +71,18 @@ class BuildPythonGraphTest(unittest.TestCase):
         test_path = str(self.root / "tests/test_a.py")
         self.assertIn(test_path, graph)
 
+    def test_include_tests_still_excludes_vendor_dirs(self) -> None:
+        # --include-tests must NOT also pull in node_modules / .venv / dist / etc.
+        write_file(self.root, "src/myapp/__init__.py", "")
+        write_file(self.root, "src/myapp/a.py", "")
+        write_file(self.root, "node_modules/pkg/index.py", "")
+        write_file(self.root, ".venv/lib/dep.py", "")
+        write_file(self.root, "dist/build_output.py", "")
+        graph = build_python_graph(self.root, exclude_tests=False)
+        for vendor in ("node_modules", ".venv", "dist"):
+            for path in graph:
+                self.assertNotIn(f"/{vendor}/", path, f"vendor dir {vendor} leaked into graph")
+
     def test_skips_syntactically_broken_file(self) -> None:
         write_file(self.root, "src/myapp/__init__.py", "")
         write_file(self.root, "src/myapp/broken.py", "from\n")  # SyntaxError
@@ -131,6 +143,31 @@ class BuildJsGraphTest(unittest.TestCase):
         b = str(self.root / "src/b.ts")
         self.assertEqual(graph[a], [b])
         self.assertEqual(graph[b], [])
+
+    def test_resolves_madge_paths_relative_to_subdirectory(self) -> None:
+        # Reproduce the real-world bug: madge run with src/ as input emits
+        # paths like "api/users.ts" (relative to src/), not "src/api/users.ts".
+        # The resolver must still find the file via the file_index.
+        from arch_review.graph import _parse_madge_json
+        write_file(self.root, "src/api/users.ts", "")
+        write_file(self.root, "src/db/session.ts", "")
+        index = {
+            "src/api/users.ts": (self.root / "src/api/users.ts"),
+            "api/users.ts": (self.root / "src/api/users.ts"),
+            "users.ts": (self.root / "src/api/users.ts"),
+            "src/db/session.ts": (self.root / "src/db/session.ts"),
+            "db/session.ts": (self.root / "src/db/session.ts"),
+            "session.ts": (self.root / "src/db/session.ts"),
+        }
+        payload = json.dumps({
+            "api/users.ts": ["db/session.ts"],
+            "db/session.ts": [],
+        })
+        graph = _parse_madge_json(payload, self.root, file_index=index)
+        users_abs = str(self.root / "src/api/users.ts")
+        session_abs = str(self.root / "src/db/session.ts")
+        self.assertIn(users_abs, graph)
+        self.assertEqual(graph[users_abs], [session_abs])
 
 
 if __name__ == "__main__":

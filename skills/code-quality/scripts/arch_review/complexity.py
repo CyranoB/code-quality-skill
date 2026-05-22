@@ -91,7 +91,8 @@ def run_complexity_check(project_root: Path, language: str, timeout: int = 60) -
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             return {"status": "error", "reason": "eslint timed out"}
-        if proc.returncode > 2:
+        # ESLint: 0 clean, 1 problems found (expected), 2+ config/runtime error.
+        if proc.returncode > 1:
             return {"status": "error", "reason": proc.stderr.strip() or "eslint failed"}
         findings = _parse_eslint_complexity(proc.stdout)
         return {"status": "found" if findings else "ok", "findings": findings}

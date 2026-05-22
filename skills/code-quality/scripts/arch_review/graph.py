@@ -12,13 +12,15 @@ import subprocess
 from pathlib import Path
 from typing import Iterable
 
-# Folders that are noise by default.
-DEFAULT_EXCLUDES = {
+# Vendor / generated / cache folders. Always excluded — `--include-tests` does
+# NOT loosen this. Scanning these distorts metrics with third-party code.
+ALWAYS_EXCLUDED_DIRS = {
     "node_modules", "dist", "build", ".next", "coverage",
     "__pycache__", ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache",
-    "tests", "test", "__tests__", "migrations",
-    "fixtures",
+    "migrations", "fixtures",
 }
+# Test directories — excluded by default; `--include-tests` opts them in.
+TEST_DIRS = {"tests", "test", "__tests__"}
 TEST_FILE_PATTERNS = (
     "*_test.py", "test_*.py",
     "*.test.ts", "*.test.tsx", "*.test.js", "*.test.jsx",
@@ -26,12 +28,18 @@ TEST_FILE_PATTERNS = (
     "conftest.py",
 )
 
+# Kept for backward compatibility with any callers that referenced the old name.
+DEFAULT_EXCLUDES = ALWAYS_EXCLUDED_DIRS | TEST_DIRS
+
 
 def _should_exclude(path: Path, exclude_tests: bool) -> bool:
     parts = set(path.parts)
+    # ALWAYS_EXCLUDED_DIRS apply regardless of --include-tests.
+    if parts & ALWAYS_EXCLUDED_DIRS:
+        return True
     if not exclude_tests:
         return False
-    if parts & DEFAULT_EXCLUDES:
+    if parts & TEST_DIRS:
         return True
     for pat in TEST_FILE_PATTERNS:
         if path.match(pat):
@@ -189,42 +197,128 @@ def detect_ts_entry_point(root: Path) -> Path | None:
     return None
 
 
-def _parse_madge_json(payload: str, root: Path) -> dict[str, list[str]]:
-    """Convert madge's relative-path JSON output to absolute-path adjacency dict."""
+_JS_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+
+
+def _enumerate_js_files(root: Path, exclude_tests: bool) -> list[Path]:
+    """Return all source files we want to include in the JS/TS graph."""
+    out: list[Path] = []
+    for p in root.rglob("*"):
+        if not p.is_file():
+            continue
+        if p.suffix.lower() not in _JS_EXTENSIONS:
+            continue
+        if _should_exclude(p.relative_to(root), exclude_tests):
+            continue
+        out.append(p)
+    return out
+
+
+def _resolve_madge_path(
+    rel_or_partial: str,
+    root: Path,
+    file_index: dict[str, Path],
+) -> str | None:
+    """Map a madge-emitted path to an absolute path inside the project.
+
+    Madge emits paths relative to either the entry-point's directory or the
+    scanned input directory, which varies by version and invocation. To stay
+    robust, we look up by the full relative form first, then by progressively
+    shorter trailing path suffixes against the file index we built ourselves.
+    """
+    # Try as-is relative to root.
+    direct = (root / rel_or_partial).resolve()
+    if direct.exists():
+        return str(direct)
+    # Suffix-match against the enumerated files (longest match wins).
+    rel = rel_or_partial.replace("\\", "/").lstrip("./")
+    suffix_parts = rel.split("/")
+    while suffix_parts:
+        candidate = "/".join(suffix_parts)
+        hit = file_index.get(candidate)
+        if hit is not None:
+            return str(hit)
+        suffix_parts = suffix_parts[1:]
+    return None
+
+
+def _parse_madge_json(
+    payload: str,
+    root: Path,
+    file_index: dict[str, Path] | None = None,
+) -> dict[str, list[str]]:
+    """Convert madge's relative-path JSON output to absolute-path adjacency dict.
+
+    `file_index` maps the trailing path form of each source file to its absolute
+    Path. When provided, paths are resolved through the index (handles madge
+    emitting paths relative to entry-point dir, src/, or anywhere else). When
+    omitted (back-compat for older callers/tests), paths are resolved against
+    `root` directly.
+    """
     raw = json.loads(payload)
-    graph: dict[str, list[str]] = {}
+    if file_index is None:
+        graph: dict[str, list[str]] = {}
+        for src, deps in raw.items():
+            src_abs = str((root / src).resolve())
+            graph[src_abs] = [str((root / d).resolve()) for d in deps]
+        return graph
+
+    graph = {}
     for src, deps in raw.items():
-        src_abs = str((root / src).resolve())
-        graph[src_abs] = [str((root / d).resolve()) for d in deps]
+        src_abs = _resolve_madge_path(src, root, file_index)
+        if src_abs is None:
+            continue  # path that doesn't correspond to any source file we saw
+        resolved_deps: list[str] = []
+        for d in deps:
+            d_abs = _resolve_madge_path(d, root, file_index)
+            if d_abs is not None and d_abs != src_abs:
+                resolved_deps.append(d_abs)
+        graph[src_abs] = resolved_deps
     return graph
 
 
 def build_js_graph(root: Path, exclude_tests: bool = True) -> dict[str, list[str]]:
     """Build JS/TS dependency graph via `npx madge --json`.
 
+    Strategy:
+      - Enumerate every source file we care about ourselves.
+      - Pass them all to madge so files not reachable from a single entry point
+        (e.g., a planted cycle `a.ts <-> b.ts`) are still in the graph.
+      - Resolve madge's relative output paths through an index of those files.
+
     Returns: {file_path: [imported_file_paths, ...]}
-    Raises RuntimeError if madge cannot resolve an entry point or fails.
+    Raises RuntimeError if no source files are found or madge fails.
     """
-    root = Path(root)
+    root = Path(root).resolve()
+    files = _enumerate_js_files(root, exclude_tests)
+    if not files:
+        raise RuntimeError("no JS/TS source files found in project root")
+
+    # Build an index keyed by every trailing path form so madge's varying
+    # relative output (vs entry-dir, vs src/, vs root) can all be resolved.
+    file_index: dict[str, Path] = {}
+    for fp in files:
+        rel = fp.relative_to(root).as_posix()
+        parts = rel.split("/")
+        for i in range(len(parts)):
+            key = "/".join(parts[i:])
+            file_index.setdefault(key, fp)
+
     has_tsconfig = (root / "tsconfig.json").exists()
     cmd: list[str] = ["npx", "--yes", "madge", "--json"]
     if has_tsconfig:
-        entry = detect_ts_entry_point(root)
-        if entry is None:
-            raise RuntimeError(
-                "no detectable TypeScript entry point — add a `main` to "
-                "package.json or src/index.ts"
-            )
         cmd += [
             "--ts-config", str(root / "tsconfig.json"),
-            "--extensions", "ts,tsx",
-            str(entry),
+            "--extensions", "ts,tsx,js,jsx",
         ]
-    else:
-        cmd += [str(root / "src") if (root / "src").exists() else str(root)]
     if exclude_tests:
-        cmd += ["--exclude", "(__tests__|\\.test\\.|\\.spec\\.|node_modules|dist|build|coverage)"]
+        cmd += [
+            "--exclude",
+            "(__tests__|\\.test\\.|\\.spec\\.|node_modules|dist|build|coverage|fixtures)",
+        ]
+    cmd += [str(fp) for fp in files]
+
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(root))
     if proc.returncode not in (0, 1):
-        raise RuntimeError(f"madge failed: {proc.stderr.strip()}")
-    return _parse_madge_json(proc.stdout, root)
+        raise RuntimeError(f"madge failed: {proc.stderr.strip() or proc.stdout.strip()}")
+    return _parse_madge_json(proc.stdout, root, file_index=file_index)
