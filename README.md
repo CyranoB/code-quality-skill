@@ -1,20 +1,20 @@
 # code-quality
 
-A Claude Code skill for code quality analysis, linting, auto-fixes, and architecture review. Works out of the box — no linter configuration required.
+A Claude Code skill for code quality analysis, linting, auto-fixes, and architecture review. Works out of the box. No linter configuration required.
 
 ## What It Does
 
-This skill detects your project's linter, runs it, normalizes the output, and presents actionable findings — all without any server setup or MCP configuration. Beyond linting, it runs **architecture reviews** that surface cycles, layering violations, coupling metrics (Ca/Ce/I), hub/god modules, deep import chains, oversized files, dead code, and complex functions — designed for on-demand audits and onboarding to unfamiliar codebases.
+The skill finds your project's linter, runs it, normalizes the output, and hands you back findings you can act on. No server setup. No MCP configuration. It also runs an architecture review that covers cycles, layering violations, coupling metrics (Ca/Ce/I), hub and god modules, deep import chains, oversized files, dead code, and complex functions. Useful for a one-off audit, or when you're new to a codebase and want to get your bearings.
 
 **No config? No problem.** The skill ships with built-in default configs (inspired by SonarQube's "Sonar way" quality profile) so analysis works even on projects with zero linter setup. When your project has its own config, the skill uses that instead.
 
-**Supported tools** (all zero-install via `npx` / `uvx`):
+**Supported tools** (all zero-install via `npx` or `uvx`):
 - **JavaScript/TypeScript**: ESLint, Biome, madge (cycles), knip (dead code), tsc (types)
 - **Python**: ruff, depcycle (cycles), vulture (dead code), pyright (types)
 
 ## Install For Your Coding Tool
 
-Install as a skill/plugin when your agent supports them. Use a manual `SKILL.md` copy when it doesn't.
+Pick the block for your agent below. If your agent doesn't have skill support, copy `SKILL.md` into its rules or conventions folder.
 
 <details>
 <summary><strong>Claude Code</strong></summary>
@@ -119,14 +119,14 @@ cp code-quality-skill/skills/code-quality/SKILL.md .continue/rules/code-quality.
 <details>
 <summary><strong>Roo Code / Kilo Code</strong></summary>
 
-Neither directly imports a Claude Code skill. The simplest path is to drop `SKILL.md` into a rules folder or convert it to the agent's custom-mode format:
+Neither imports a Claude Code skill directly. Either drop `SKILL.md` into a rules folder, or convert it to the agent's custom-mode format:
 
 - Roo: copy to `.roo/rules/code-quality.md`
 - Kilo: copy to `.kilo/agent/code-quality.md` (add a YAML frontmatter block)
 
 </details>
 
-After installing, the skill scripts under `scripts/` need to be reachable on disk. Most agents handle this automatically once the skill folder is in the right location. If your agent runs in an isolated sandbox, ensure `bash`, `python3`, `npx`, and `uvx` are available in that environment.
+The skill needs `bash`, `python3`, `npx`, and `uvx` on PATH. Local agents almost always have these. If your agent runs in a sandbox, check that the sandbox includes them.
 
 ## Usage
 
@@ -172,7 +172,7 @@ Once installed, the skill triggers automatically when you ask your agent to:
 4. **Presentation**: Shows findings grouped by severity with explanations and fix suggestions
 5. **Fixing**: Uses the tool's native `--fix` and re-analyzes to confirm
 6. **Dependency analysis**: Detects circular dependencies and orphan modules — madge for JS/TS, depcycle for Python (both zero-install via `npx`/`uvx`)
-7. **Architecture review**: A stdlib-only Python orchestrator builds the dependency graph (via `ast` for Python, `npx madge` for JS/TS), computes coupling metrics (Ca/Ce/I), infers layers heuristically with framework-specific overrides (Next.js, Django, FastAPI, NestJS, Flask, Express), detects layering violations (the Dependency Rule), surfaces hub/god modules, deep import chains, oversized files, and excessive public exports, and folds in dead code (`knip` / `vulture`) and complex functions (ruff C901 / ESLint complexity)
+7. **Architecture review**: A small Python orchestrator builds the dependency graph (using `ast` for Python and `npx madge` for JS/TS). From that graph it computes coupling metrics (Ca/Ce/I) and finds cycles, layering violations (the Dependency Rule), hub and god modules, deep import chains, oversized files, and excessive public exports. Layers are inferred from folder conventions, with adjustments for Next.js, Django, FastAPI, NestJS, Flask, and Express. Dead code (via `knip` or `vulture`) and complex functions (via ruff C901 or ESLint complexity) round out the report.
 
 ## Detection Priority
 
@@ -247,7 +247,7 @@ code-quality-skill/
 │           ├── pyright.md         # Pyright CLI reference
 │           ├── madge.md           # Madge (JS/TS dependency analysis)
 │           ├── pydeps.md          # Python dependency analysis (depcycle + pydeps)
-│           ├── architecture.md    # Workflow I — layers, framework rules, JSON schema
+│           ├── architecture.md    # Workflow I: layers, framework rules, JSON schema
 │           ├── knip.md            # Knip (JS/TS dead code)
 │           ├── vulture.md         # Vulture (Python dead code)
 │           └── severity-map.md    # Severity normalization
@@ -259,11 +259,11 @@ code-quality-skill/
 
 ## Requirements
 
-- A supported coding agent (Claude Code, Codex CLI, Cursor, Cline, Gemini CLI, etc. — see install matrix above)
-- **Python**: No setup needed — uses `uvx ruff` which runs without installation
-- **JavaScript/TypeScript**: No setup needed for fallback — uses Biome via `npx` (handles both JS and TS natively). If you prefer ESLint, create an `eslint.config.js` and the skill will use it instead
-- **Dependency analysis**: madge (`npx madge`) for JS/TS, depcycle (`uvx depcycle`) for Python — both zero-install
-- **Architecture review (Workflow I)**: `python3` on the host (system Python on macOS/Linux is fine — no extra install). Optional sub-checks: `npx knip` (JS/TS dead-code), `uvx vulture` (Python dead-code) — both auto-fetched on demand
+- A supported coding agent. See the install table above (Claude Code, Codex CLI, Cursor, Cline, Gemini CLI, and others).
+- **Python**: nothing to install. `uvx ruff` runs without a permanent install.
+- **JavaScript/TypeScript**: nothing to install for the fallback path. Biome via `npx` handles both JS and TS natively. If you prefer ESLint, create an `eslint.config.js` and the skill picks it up.
+- **Dependency analysis**: madge (`npx madge`) for JS/TS, depcycle (`uvx depcycle`) for Python. Both run without installing anything globally.
+- **Architecture review (Workflow I)**: `python3` on the host. The system Python on macOS or Linux works; nothing else to install. Two optional sub-checks need extra tools: `npx knip` for JS/TS dead code, and `uvx vulture` for Python dead code. Both get fetched on first use.
 
 ## License
 
