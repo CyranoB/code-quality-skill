@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Bundled ESLint + sonarjs plugin for Workflow E (cognitive complexity) and Workflow I (complex_functions). Not used for general A/C/D lint — Biome remains the JS/TS fallback there.",
+  "description": "Bundled ESLint + sonarjs plugin for Lint and Architecture Review complexity checks. Not used as the general JS/TS fallback; Biome remains that fallback.",
   "devDependencies": {
     "eslint": "^9.18.0",
     "eslint-plugin-sonarjs": "^3.0.0",

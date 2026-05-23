@@ -75,7 +75,7 @@ class RunDetectSecretsSkipsTest(unittest.TestCase):
 class SingleFileInputTest(unittest.TestCase):
     """When the caller passes a file path (not a directory), the wrapper must
     use the parent as cwd and scan just the basename — subprocess refuses
-    cwd=<file>. Documented in SKILL.md Workflow J followups."""
+    cwd=<file>. Documented in SKILL.md Security Scan followups."""
 
     def test_file_path_uses_parent_as_cwd_and_basename_as_target(self) -> None:
         import tempfile

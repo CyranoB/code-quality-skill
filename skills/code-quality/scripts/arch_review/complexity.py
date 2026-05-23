@@ -1,4 +1,4 @@
-"""Wrapper around Workflow E's complexity commands.
+"""Wrapper around the code-quality skill's complexity commands.
 
 Cyclomatic:
   * Python:    ruff C901
@@ -10,13 +10,13 @@ Cognitive (Sonar-style; measures human reading effort, weights nesting heavily):
                bundled ESLint wrapper at scripts/eslint-defaults.sh
 
 `run_complexity_check` accepts a `metric` kwarg:
-  * "cyclomatic" (default; back-compat with original Workflow E)
+  * "cyclomatic" (default; back-compat with the original complexity path)
   * "cognitive"  (cognitive only)
   * "both"       (runs both and merges findings by (file, line ±2))
 
 In "both" mode, severity is driven by cognitive when present (16-25 MAJOR,
 26+ CRITICAL); falls back to cyclomatic (>10 MAJOR) when only cyclomatic
-is available. Workflow I's complex_functions section uses metric="both".
+is available. Architecture Review's complex_functions section uses metric="both".
 """
 from __future__ import annotations
 
@@ -320,7 +320,7 @@ def run_complexity_check(
         cyc_ok = cyc["status"] in ("ok", "found")
         cog_ok = cog["status"] in ("ok", "found")
         # If neither backend produced usable output, surface skipped/error
-        # explicitly so callers (e.g. Workflow I) don't render "Code is
+        # explicitly so callers don't render "Code is
         # well-structured" when nothing actually ran.
         if not cyc_ok and not cog_ok:
             reasons: List[str] = []

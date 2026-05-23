@@ -1,4 +1,4 @@
-# Architecture Review Reference (Workflow I)
+# Architecture Review Reference
 
 This file documents the layer-inference heuristics, framework overrides, severity thresholds, and JSON output schema used by `scripts/arch_review/`.
 

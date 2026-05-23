@@ -12,7 +12,7 @@ from security_scan.runner import ALL_SECTIONS, run_scan
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="security_scan",
-        description="Security scan orchestrator (Workflow J of code-quality skill).",
+        description="Security Scan orchestrator for the code-quality skill.",
     )
     parser.add_argument("--project-root", required=True)
     parser.add_argument(

@@ -72,64 +72,46 @@ The skill needs `bash`, `python3`, `npx`, and `uvx` on PATH. Local agents almost
 
 ## Workflows
 
-### A — Review File or Code
+### Lint
 
-**Triggers**: "review src/index.ts", "what's wrong with this file?", "lint main.py", "any issues in auth.ts?"
+**Triggers**: "review src/index.ts", "what's wrong with this file?", "lint main.py", "fix linting errors", "audit my project", "scan the whole project"
 
-Runs the project's linter on a specific file or directory. Maps tool-native severity to a unified 5-tier scale (BLOCKER → CRITICAL → MAJOR → MINOR → INFO). For MAJOR and above, explains why the issue matters and suggests a concrete fix.
+Runs the project's linter on a file, directory, or whole project. In analyze mode it reports lint plus explicit cyclomatic and cognitive complexity findings so complexity does not depend on the project's own linter config. In fix mode it captures a baseline, applies the native `--fix` / `--write` command, re-runs analysis, and reports what changed and what remains.
 
-### B — Fix Issues
+Project audits cap output at 50 findings sorted by severity, show the most problematic files, count auto-fixable issues, and call out manual-only complexity refactors.
 
-**Triggers**: "fix linting errors", "clean up src/", "auto-fix this file"
-
-Runs the linter to get a baseline, applies `--fix` / `--write`, then re-analyzes to show exactly what changed and what couldn't be auto-fixed. For issues without a fix, provides specific code changes to apply manually.
-
-### C — Project Audit
-
-**Triggers**: "audit my project", "scan the whole project", "overall code quality report"
-
-Full-project lint run. Caps output at 50 findings sorted by severity. Shows the most problematic files, a severity breakdown, and quick-win auto-fixable counts. Offers follow-up actions (fix, drill into a file, check dependencies).
-
-### D — Pre-commit Check
+### Pre-commit Check
 
 **Triggers**: "check before commit", "pre-commit check", "ready to commit?", "lint my changes"
 
-Detects changed files via git, lints only those files, and also runs the type checker (pyright for Python, tsc for TypeScript) if one is configured. Returns a clear PASS or FAIL verdict. Designed to be fast enough to run every commit.
+Detects changed files via git, lints only those files, and also runs the type checker (pyright for Python, tsc for TypeScript) if one is configured. Returns a clear PASS or FAIL verdict. Designed to be fast enough to run every commit, so it skips cognitive complexity unless explicitly requested.
 
-### E — Complexity Analysis (Cognitive + Cyclomatic)
+### Type Check
 
-**Triggers**: "check complexity", "find complex functions", "cognitive complexity", "hard to test", "hard to read", "refactor candidates"
+**Triggers**: "type check", "verify types", "run pyright", "run tsc", "check types", "type errors"
 
-Reports **both** cyclomatic and cognitive complexity in a single table. Cognitive is the headline metric — it tracks human reading effort (the strongest predictor of defect density) by penalizing nesting and sequence breaks. Cyclomatic stays as a secondary column for test coverage planning.
+Runs `npx pyright` for Python or `npx tsc --noEmit` for TypeScript and normalizes the output. Pyright errors map to CRITICAL; warnings to MAJOR. Filters `reportMissingTypeStubs` noise into a single summary line.
+
+### Architecture Review
+
+**Triggers**: "architecture review", "check complexity", "find complex functions", "find circular dependencies", "find cycles", "orphan modules", "find hub modules", "layering violations", "coupling metrics", "show me the structure", "onboard me to this codebase"
+
+Architecture Review has three modes:
+
+| Request | Mode |
+|---------|------|
+| complexity only | focused complexity |
+| cycles/dependencies only | focused cycles |
+| architecture/audit/onboarding/coupling/layers | full audit |
+
+Focused complexity reports both cyclomatic and cognitive complexity in a single table. Cognitive is the headline metric because it tracks human reading effort by penalizing nesting and sequence breaks. Cyclomatic stays as a secondary column for test coverage planning.
 
 | Metric | Threshold | Severity |
 |--------|-----------|---------|
-| Cognitive complexity | 15 | 16–25 → MAJOR, ≥26 → CRITICAL |
-| Cyclomatic complexity | 10 | any excess → MAJOR |
+| Cognitive complexity | 15 | 16-25 -> MAJOR, >=26 -> CRITICAL |
+| Cyclomatic complexity | 10 | any excess -> MAJOR |
 
-Python uses `ruff C901` + `flake8-cognitive-complexity` (both via `uvx`). JS/TS uses the core ESLint `complexity` rule + `eslint-plugin-sonarjs` `cognitive-complexity` (bundled in `defaults/package.json`, installed once on first use via `npm ci`). For each finding, provides refactoring suggestions: extract method, early returns, guard clauses, table dispatch.
-
-### F — Dependency Analysis
-
-**Triggers**: "find circular dependencies", "check imports", "find cycles", "orphan modules", "dependency graph"
-
-Detects circular imports (CRITICAL — causes runtime crashes and breaks tree-shaking) and orphan modules (INFO — unused files). Uses `npx madge` for JS/TS and `uvx depcycle` for Python, both zero-install. For each cycle, explains the coupling and recommends the extraction move to break it.
-
-### G — Linter Setup
-
-**Triggers**: "set up linting", "configure eslint", "configure ruff", "add a linter to my project"
-
-The only workflow that modifies the project. Detects the language, checks if a config already exists, then sets up the appropriate linter (ruff for Python, ESLint for JS/TS, Biome as an alternative). Uses the skill's built-in defaults as a starting point. Verifies the setup by re-running detection and offers to run an initial audit.
-
-### H — Type Checking
-
-**Triggers**: "type check", "verify types", "run pyright", "check types", "type errors"
-
-Runs `npx pyright` (Python) or `npx tsc --noEmit` (TypeScript) and normalizes the output. Pyright errors map to CRITICAL; warnings to MAJOR. Filters `reportMissingTypeStubs` noise into a single summary line. Also wires into Workflow D — type errors block the pre-commit verdict just like lint errors.
-
-### I — Architecture Review
-
-**Triggers**: "architecture review", "find hub modules", "layering violations", "coupling metrics", "show me the structure", "onboard me to this codebase"
+Focused cycles detects circular imports (CRITICAL) and orphan modules (INFO). Uses `npx madge` for JS/TS and `uvx depcycle` for Python, both zero-install.
 
 A full structural audit with ten sections, intended for audits and onboarding. A Python orchestrator runs all sections in parallel and returns a single JSON report.
 
@@ -148,7 +130,7 @@ A full structural audit with ten sections, intended for audits and onboarding. A
 
 Framework-aware layer inference (Next.js, Django, FastAPI, NestJS, Flask, Express). All thresholds configurable via CLI flags. Use `--skip-section` to drop any noisy section.
 
-### J — Security Scan
+### Security Scan
 
 **Triggers**: "security scan", "OWASP scan", "find vulnerabilities", "SAST", "check for hardcoded secrets", "find API keys", "leaked credentials", "any secrets in this repo?"
 
@@ -158,6 +140,12 @@ Runs two tools in parallel (both zero-install via `uvx`):
 - **detect-secrets** scans for hardcoded credentials: AWS keys, private keys, tokens, high-entropy strings, generic passwords. Every finding is a BLOCKER — committed credentials must be rotated.
 
 Default exclude list: `.git/`, `node_modules/`, `dist/`, `build/`, `venv/`, lockfiles, `*.min.js`, `*.map`. Use `--skip-section semgrep` or `--skip-section secrets` to run only one tool. Findings capped at 200 per section with `truncated: true` when exceeded.
+
+### Linter Setup
+
+**Triggers**: "set up linting", "configure eslint", "configure ruff", "add a linter to my project", "set up biome"
+
+The only workflow that modifies the project. Detects the language, checks if a config already exists, then sets up the appropriate linter: ruff for Python, ESLint for JS/TS, or Biome as an alternative. Uses the skill's built-in defaults as a starting point. Verifies the setup by re-running detection and offers to run an initial lint pass.
 
 ## Usage
 
@@ -223,15 +211,15 @@ When no project-level linter config is found, the skill uses its built-in defaul
 
 11 rule categories enabled: pycodestyle errors/warnings, pyflakes, cyclomatic complexity (max 10), import sorting, naming conventions, pyupgrade, bugbear, security (bandit), simplify, and print statements. Pragmatic per-file ignores (allows `assert` in tests, `print` in scripts). Runs via `uvx ruff` — zero install needed.
 
-### JavaScript/TypeScript — Biome (zero-config fallback for Workflows A/C/D)
+### JavaScript/TypeScript — Biome fallback for general lint
 
-When no linter is configured, Workflows A/C/D use Biome as the fallback. Biome handles both JS and TS natively — no parser plugins needed. Built-in rules cover correctness (unused variables, unreachable code), suspicious patterns (`noExplicitAny`, `noDoubleEquals`), complexity, and formatting. ESLint can't parse TypeScript without `@typescript-eslint/parser`, making Biome the better zero-config choice.
+When no linter is configured, Lint and Pre-commit Check use Biome as the fallback. Biome handles both JS and TS natively — no parser plugins needed. Built-in rules cover correctness (unused variables, unreachable code), suspicious patterns (`noExplicitAny`, `noDoubleEquals`), complexity, and formatting. ESLint can't parse TypeScript without `@typescript-eslint/parser`, making Biome the better zero-config choice.
 
-### JavaScript/TypeScript — Bundled ESLint + sonarjs (Workflows E and I)
+### JavaScript/TypeScript — Bundled ESLint + sonarjs for complexity
 
-Complexity analysis (Workflow E) and the complex-functions section of the architecture review (Workflow I) use a bundled ESLint with `eslint-plugin-sonarjs` for cognitive complexity. The skill installs this once on first use via `npm ci` (~30MB into `defaults/node_modules`, ~15s) using a committed lockfile for reproducible installs. Subsequent runs are instant. This is entirely separate from your project's own ESLint config — it won't interfere with Workflows A/C/D. Requires `npm` / Node.js on PATH.
+Lint and Architecture Review use a bundled ESLint with `eslint-plugin-sonarjs` for JS/TS complexity checks. The skill installs this once on first use via `npm ci` (~30MB into `defaults/node_modules`, ~15s) using a committed lockfile for reproducible installs. Subsequent runs are instant. This is entirely separate from your project's own ESLint config and is not the general JS/TS fallback linter. Requires `npm` / Node.js on PATH.
 
-To use your own rules instead, create a config file in your project root and the skill will pick it up for Workflows A/C/D.
+To use your own general lint rules instead, create a config file in your project root and the skill will pick it up for Lint and Pre-commit Check.
 
 ## File Structure
 
@@ -242,7 +230,7 @@ code-quality-skill/
 │   └── marketplace.json       # Self-hosted marketplace definition
 ├── skills/
 │   └── code-quality/
-│       ├── SKILL.md           # Core skill definition (Workflows A–J)
+│       ├── SKILL.md           # Core skill definition (six named workflows)
 │       ├── scripts/
 │       │   ├── detect-linter.sh      # Auto-detect linter + framework
 │       │   ├── arch-review.sh        # Wrapper for the architecture-review orchestrator
@@ -275,7 +263,7 @@ code-quality-skill/
 │           ├── pyright.md            # Pyright CLI reference
 │           ├── madge.md              # Madge (JS/TS dependency analysis)
 │           ├── pydeps.md             # Python dependency analysis (depcycle + pydeps)
-│           ├── architecture.md       # Workflow I: layers, framework rules, JSON schema
+│           ├── architecture.md       # Architecture Review layers, framework rules, JSON schema
 │           ├── knip.md               # Knip (JS/TS dead code)
 │           ├── vulture.md            # Vulture (Python dead code)
 │           ├── cognitive-complexity.md  # Cognitive vs cyclomatic, parsers, refactoring
@@ -292,12 +280,12 @@ code-quality-skill/
 
 - A supported coding agent. Install with `npx skills add CyranoB/code-quality-skill` for Claude Code, Codex CLI, Cursor, Cline, Gemini CLI, Windsurf, and other supported agents.
 - **Python linting / complexity**: nothing to install. `uvx ruff` and `uvx flake8-cognitive-complexity` run without a permanent install. Requires `uvx` (`pip install uv` or `brew install uv`).
-- **JavaScript/TypeScript linting (Workflows A/C/D)**: nothing to install. Biome via `npx` handles both JS and TS natively. If you prefer ESLint, create an `eslint.config.js` and the skill picks it up.
-- **JS/TS cognitive complexity (Workflows E/I)**: installs `eslint-plugin-sonarjs` once via `npm ci` on first use (~15s, ~30MB into `defaults/node_modules`). Requires `npm` / Node.js on PATH.
+- **JavaScript/TypeScript linting**: nothing to install. Biome via `npx` handles both JS and TS natively when no project linter is configured. If you prefer ESLint, create an `eslint.config.js` and the skill picks it up.
+- **JS/TS cognitive complexity**: installs `eslint-plugin-sonarjs` once via `npm ci` on first use (~15s, ~30MB into `defaults/node_modules`). Requires `npm` / Node.js on PATH. Lint includes these complexity checks by default; Pre-commit Check skips them unless explicitly requested.
 - **Dependency analysis**: madge (`npx madge`) for JS/TS, depcycle (`uvx depcycle`) for Python. Both run without installing anything globally.
-- **Architecture review (Workflow I)**: `python3` on the host (system Python on macOS/Linux works). Optional sub-checks: `npx knip` for JS/TS dead code, `uvx vulture` for Python dead code, fetched on first use.
-- **Security scan (Workflow J)**: `uvx` on PATH. Semgrep and detect-secrets are fetched on first use — no permanent install needed. If `uvx` is absent, the section skips with a warning rather than failing.
-- **Type checking (Workflow H/D)**: `npx pyright` for Python (zero-install), `npx tsc` for TypeScript (requires the project to have TypeScript installed).
+- **Architecture Review**: `python3` on the host (system Python on macOS/Linux works). Optional sub-checks: `npx knip` for JS/TS dead code, `uvx vulture` for Python dead code, fetched on first use.
+- **Security Scan**: `uvx` on PATH. Semgrep and detect-secrets are fetched on first use — no permanent install needed. If `uvx` is absent, the section skips with a warning rather than failing.
+- **Type Check / Pre-commit Check**: `npx pyright` for Python (zero-install), `npx tsc` for TypeScript (requires the project to have TypeScript installed).
 
 ## License
 

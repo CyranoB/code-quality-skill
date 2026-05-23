@@ -1,6 +1,6 @@
-# Semgrep Reference (Workflow J)
+# Semgrep Reference
 
-Semgrep is the cross-language SAST engine powering Workflow J's security scan.
+Semgrep is the cross-language SAST engine powering Security Scan.
 It supports JS/TS, Python, Go, Java, Ruby, PHP, C, C#, Rust, and ~20 more, with
 a community ruleset of ~2000+ rules covering OWASP Top 10, CWE Top 25, and
 language-specific dangerous patterns.
@@ -108,7 +108,7 @@ files, or known-safe wrappers.
 
 ## Default exclude set (shared with detect-secrets)
 
-The skill applies these to every Workflow J run, in addition to anything you
+The skill applies these to every Security Scan run, in addition to anything you
 pass via `--exclude`:
 
 - `.git`, `node_modules`, `dist`, `build`
@@ -150,5 +150,5 @@ plus all other languages. Two security engines is noise; one is signal.
 
 If you specifically want ESLint-formatted security findings for a tight
 pre-commit loop on JS-only code, install `eslint-plugin-security` in your
-project — Workflow A/C/D will pick it up via your project's own ESLint config
+project; Lint will pick it up via your project's own ESLint config
 without the skill bundling it.

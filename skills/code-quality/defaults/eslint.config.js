@@ -1,9 +1,9 @@
 // Default ESLint configuration for the code-quality skill.
-// Used by Workflow E (cognitive complexity) and Workflow I (complex_functions)
-// on JS/TS targets via scripts/eslint-defaults.sh.
+// Used by Lint and Architecture Review complexity checks on JS/TS targets via
+// scripts/eslint-defaults.sh.
 //
-// NOTE: This config is NOT the JS/TS fallback for Workflows A/C/D — Biome
-// remains the fallback there (faster, native TS, no parser plugins needed).
+// NOTE: This config is NOT the general JS/TS fallback. Biome remains the
+// fallback there (faster, native TS, no parser plugins needed).
 // See SKILL.md "Default Configs" for the rationale.
 //
 // To override: create an eslint.config.js in your project.
@@ -12,7 +12,7 @@
 // the common errors and style; eslint-plugin-sonarjs adds cognitive complexity
 // and a small curated set of high-signal code smells.
 //
-// Security hotspots are intentionally NOT covered here — Workflow J's Semgrep
+// Security hotspots are intentionally NOT covered here; Security Scan's Semgrep
 // pass owns that surface with deeper, cross-language coverage.
 
 import sonarjs from 'eslint-plugin-sonarjs';
@@ -23,7 +23,7 @@ export default [
   // generics, interface declarations, etc. don't trigger a fatal parse error.
   // Without this, ESLint uses Espree and silently emits `{ruleId: null,
   // fatal: true}` messages — the skill's complexity parser ignores those by
-  // ruleId, which would mean Workflow E/I reports "clean" on real TS code.
+  // ruleId, which would mean complexity checks report "clean" on real TS code.
   {
     files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {

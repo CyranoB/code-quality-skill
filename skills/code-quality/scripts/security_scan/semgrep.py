@@ -1,4 +1,4 @@
-"""Semgrep wrapper for Workflow J (security scan).
+"""Semgrep wrapper for Security Scan.
 
 Invokes Semgrep via uvx so the user needs no local install — only `uv`.
 Default config is `p/security-audit` (cross-language security ruleset);

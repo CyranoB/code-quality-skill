@@ -1,4 +1,4 @@
-"""Secret scanner wrapper for Workflow J.
+"""Secret scanner wrapper for Security Scan.
 
 Primary tool: detect-secrets (zero-install via uvx). detect-secrets uses
 multiple plugins (AWS keys, private keys, high-entropy strings, etc.) and

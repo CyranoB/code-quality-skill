@@ -28,10 +28,10 @@ Auto-detects the linter for a project and outputs key=value pairs:
   FILES             - Space-separated file list (only with --changed-only)
   TYPE_CHECKER      - Type checker (pyright, tsc, none)
   TYPE_CHECK_COMMAND - Full command to run type checking
-  COGNITIVE_COMMAND - Command for cognitive complexity (Workflow E/I), per LANGUAGE
-  SEMGREP_AVAILABLE - "true" if uvx is on PATH (Workflow J semgrep)
-  SECRETS_TOOL      - Secret scanner: detect-secrets, gitleaks, or none (Workflow J)
-  ESLINT_DEFAULTS_CMD - Wrapper that runs the skill's bundled ESLint+sonarjs (Workflow E/I, JS/TS)
+  COGNITIVE_COMMAND - Command for cognitive complexity, per LANGUAGE
+  SEMGREP_AVAILABLE - "true" if uvx is on PATH for Security Scan
+  SECRETS_TOOL      - Secret scanner: detect-secrets, gitleaks, or none
+  ESLINT_DEFAULTS_CMD - Wrapper that runs the skill's bundled ESLint+sonarjs
 
 Options:
   --changed-only  Only list files changed in git (staged + unstaged)
@@ -104,7 +104,7 @@ pyproject_has_section() {
 }
 
 # Detect framework. Priority: nextjs > nestjs > django > fastapi > flask > express.
-# Used by Workflow I (architecture review).
+# Used by Architecture Review.
 detect_framework() {
   local root="$1"
 
@@ -405,7 +405,7 @@ DETECTED_LANG="${LANG_LINE#LANGUAGE=}"
 detect_type_checker "$DETECTED_LANG"
 
 # TypeScript signal — emitted for any JS project that has a tsconfig.json so
-# Workflow F (and others) can pick the right madge flags without re-detecting.
+# Focused cycle checks can pick the right madge flags without re-detecting.
 if [[ "$DETECTED_LANG" == "javascript" ]] && has_file "tsconfig.json"; then
   echo "TYPESCRIPT=true"
 else
@@ -426,10 +426,10 @@ else
   echo "FILES="
 fi
 
-# Framework hint (used by Workflow I).
+# Framework hint used by Architecture Review.
 echo "FRAMEWORK=$(detect_framework "$PROJECT_ROOT")"
 
-# --- Cognitive complexity (Workflow E / Workflow I) ---
+# --- Cognitive complexity for Lint and Architecture Review ---
 # Build a per-language command that produces cognitive complexity findings.
 # JS/TS: ESLint + eslint-plugin-sonarjs via the bundled wrapper.
 # Python: flake8 + flake8-cognitive-complexity via uvx (text output, regex-parsed).
@@ -452,7 +452,7 @@ case "$DETECTED_LANG" in
     ;;
 esac
 
-# --- Security scan (Workflow J) ---
+# --- Security Scan ---
 # Semgrep runs via uvx (zero-install). Mark availability based on uvx presence.
 if command -v uvx >/dev/null 2>&1; then
   echo "SEMGREP_AVAILABLE=true"
