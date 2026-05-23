@@ -2,7 +2,7 @@
 
 ![Nitpicky Narwhal](assets/header.jpeg)
 
-Most creatures with a three-metre spike protruding from their face would use it for something dramatic. Jousting, perhaps, or opening letters in a threatening manner. The narwhal instead uses it to poke at things in cold, dark water where nobody is watching, which is more or less what this skill does to your code at two in the morning. It will find the unused variable you left in a file you forgot existed. It will notice that module A imports module B which imports module C which imports module A. It will not be thanked for this, and it does not expect to be.
+_Most creatures with a three-metre spike protruding from their face would use it for something dramatic. Jousting, perhaps, or opening letters in a threatening manner. The narwhal instead uses it to poke at things in cold, dark water where nobody is watching, which is more or less what this skill does to your code at two in the morning. It will find the unused variable you left in a file you forgot existed. It will notice that module A imports module B which imports module C which imports module A. It will not be thanked for this, and it does not expect to be._
 
 A code quality skill for AI agents. Linting, type checking, complexity analysis, and architecture review using whatever tools your project already has.
 
