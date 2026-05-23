@@ -1,26 +1,19 @@
 ---
 name: code-quality
 description: >-
-  Run code quality analysis, linting, and auto-fixes using project-native tools
-  (ESLint, Biome, ruff). Use this skill whenever the user asks to "review code",
-  "lint this file", "check code quality", "fix linting errors", "audit my project",
-  "check before commit", "run static analysis", "find bugs", "clean up this code",
-  or "pre-commit check". Also triggers when mentioning ESLint, ruff, Biome, or
-  code quality issues like unused variables, type errors, or style violations.
-  Also triggers on "cyclomatic complexity", "check complexity", "find complex
-  functions", "complexity analysis", "too complex", or "hard to test".
-  Also triggers on "circular dependencies", "circular imports", "dependency
-  graph", "check imports", "module dependencies", "find cycles", or "orphan
-  modules".
-  Also triggers on "set up linting", "configure eslint", "configure ruff",
-  "add a linter", "set up code quality", "init eslint", or "set up biome".
-  Also triggers on "type check", "verify types", "run pyright", "run tsc",
-  "type errors", "check types", "verify code", "pyright", "static type
-  analysis", or "type safety".
-  Also triggers on "architecture review", "review architecture", "arch audit",
-  "find hub modules", "find god modules", "layering violations", "coupling
-  metrics", "module coupling", "instability", "show me the structure", or
-  "onboard me to this codebase".
+  Run code quality analysis using project-native tools (ESLint, Biome, ruff,
+  pyright, tsc, madge, pydeps): linting, auto-fix, type checking, complexity,
+  dependency, and architecture analysis. Use when the user asks to review
+  code, lint a file, check code quality, fix linting errors, audit a project,
+  run static analysis, find bugs, or do pre-commit checks. Also triggers on
+  ESLint, Biome, ruff, pyright, tsc; unused variables, style violations;
+  cyclomatic complexity, complex functions, hard to test; circular
+  dependencies, dependency graph, module dependencies, find cycles, orphan
+  modules; set up linting, configure eslint/ruff/biome, add a linter; type
+  check, verify types, type errors, type safety, static type analysis;
+  architecture review, arch audit, hub modules, god modules, layering
+  violations, coupling metrics, instability, show me the structure, or
+  onboard me to this codebase.
 ---
 
 # Code Quality Skill
