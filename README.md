@@ -16,14 +16,24 @@ The skill finds your project's linter, runs it, normalizes the output, and hands
 - **JavaScript/TypeScript**: ESLint, Biome, madge (cycles), knip (dead code), tsc (types)
 - **Python**: ruff, depcycle (cycles), vulture (dead code), pyright (types)
 
-## Install For Your Coding Tool
+## Install
 
-Pick the block for your agent below. If your agent doesn't have skill support, copy `SKILL.md` into its rules or conventions folder.
+```bash
+npx skills add CyranoB/code-quality-skill
+```
+
+Auto-detects your coding agent, installs into the current project by default, and supports Claude Code, Cursor, Codex, Cline, Gemini CLI, Windsurf, and [50+ others](https://github.com/vercel-labs/skills).
+
+**Global install** (available in every project):
+
+```bash
+npx skills add CyranoB/code-quality-skill -g
+```
 
 <details>
-<summary><strong>Claude Code</strong></summary>
+<summary><strong>Alternative install methods</strong></summary>
 
-Install from the plugin marketplace:
+### Claude Code plugin marketplace
 
 ```text
 /plugin marketplace add CyranoB/code-quality-skill
@@ -32,69 +42,19 @@ Install from the plugin marketplace:
 
 Restart Claude Code, then check `/skills`.
 
-Local-clone fallback:
+### Manual clone
+
+Copy the skill directory into the skills directory used by your agent. For agents that read `.agents/skills/`:
 
 ```bash
 git clone https://github.com/CyranoB/code-quality-skill.git
-cp -R code-quality-skill/skills/code-quality ~/.claude/skills/
+mkdir -p .agents/skills
+cp -R code-quality-skill/skills/code-quality .agents/skills/
 ```
 
-</details>
+Agent-specific paths vary, so use your agent's documented project or global skills directory if it does not read `.agents/skills/`.
 
-<details>
-<summary><strong>Codex CLI</strong></summary>
-
-Codex CLI reads skills from `~/.agents/skills/` (global) and `$REPO/.agents/skills/` (per-project):
-
-```bash
-git clone https://github.com/CyranoB/code-quality-skill.git
-mkdir -p ~/.agents/skills
-cp -R code-quality-skill/skills/code-quality ~/.agents/skills/
-```
-
-</details>
-
-<details>
-<summary><strong>Cursor</strong></summary>
-
-Cursor reads from `.cursor/skills/`, `.agents/skills/`, and `.claude/skills/`:
-
-```bash
-git clone https://github.com/CyranoB/code-quality-skill.git
-mkdir -p .cursor/skills
-cp -R code-quality-skill/skills/code-quality .cursor/skills/
-```
-
-</details>
-
-<details>
-<summary><strong>Cline</strong></summary>
-
-Cline reads skills from `~/.cline/skills/` (global) or `.cline/skills/` (workspace):
-
-```bash
-git clone https://github.com/CyranoB/code-quality-skill.git
-mkdir -p ~/.cline/skills
-cp -R code-quality-skill/skills/code-quality ~/.cline/skills/
-```
-
-For older Cline builds without skill support, copy `SKILL.md` into `.clinerules/` or append it to your `AGENTS.md`.
-
-</details>
-
-<details>
-<summary><strong>Gemini CLI</strong></summary>
-
-Install as a Gemini extension:
-
-```bash
-gemini extensions install https://github.com/CyranoB/code-quality-skill
-```
-
-</details>
-
-<details>
-<summary><strong>Aider</strong></summary>
+### Aider
 
 Aider has no skill loader. Load the workflow file as a read-only convention:
 
@@ -104,29 +64,6 @@ aider --read code-quality-skill/skills/code-quality/SKILL.md
 ```
 
 Or add the path to your `.aider.conf.yml` under `read:`.
-
-</details>
-
-<details>
-<summary><strong>Continue.dev</strong></summary>
-
-Continue uses rule files. Copy `SKILL.md` into the project's rules directory:
-
-```bash
-git clone https://github.com/CyranoB/code-quality-skill.git
-mkdir -p .continue/rules
-cp code-quality-skill/skills/code-quality/SKILL.md .continue/rules/code-quality.md
-```
-
-</details>
-
-<details>
-<summary><strong>Roo Code / Kilo Code</strong></summary>
-
-Neither imports a Claude Code skill directly. Either drop `SKILL.md` into a rules folder, or convert it to the agent's custom-mode format:
-
-- Roo: copy to `.roo/rules/code-quality.md`
-- Kilo: copy to `.kilo/agent/code-quality.md` (add a YAML frontmatter block)
 
 </details>
 
@@ -263,7 +200,7 @@ code-quality-skill/
 
 ## Requirements
 
-- A supported coding agent. See the install table above (Claude Code, Codex CLI, Cursor, Cline, Gemini CLI, and others).
+- A supported coding agent. Install with `npx skills add CyranoB/code-quality-skill` for Claude Code, Codex CLI, Cursor, Cline, Gemini CLI, Windsurf, and other supported agents.
 - **Python**: nothing to install. `uvx ruff` runs without a permanent install.
 - **JavaScript/TypeScript**: nothing to install for the fallback path. Biome via `npx` handles both JS and TS natively. If you prefer ESLint, create an `eslint.config.js` and the skill picks it up.
 - **Dependency analysis**: madge (`npx madge`) for JS/TS, depcycle (`uvx depcycle`) for Python. Both run without installing anything globally.
