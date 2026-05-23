@@ -23,9 +23,10 @@ server setup, no token overhead when not in use.
 1. **Lint** - review, check, lint, fix, or audit code quality
 2. **Pre-commit Check** - changed-file lint and type check before commit
 3. **Type Check** - pyright or tsc static type analysis
-4. **Architecture Review** - full audit plus focused complexity/cycle checks
+4. **Architecture Review** - full structural audit plus focused complexity/cycle checks
 5. **Security Scan** - Semgrep SAST plus detect-secrets
-6. **Linter Setup** - configure a project-level linter
+6. **Comprehensive Review** - read-only maximum-coverage review across lint, complexity, types, architecture, and security
+7. **Linter Setup** - configure a project-level linter
 
 **Supported tools**:
 - **JavaScript/TypeScript linting**: ESLint, Biome
@@ -146,12 +147,15 @@ Suggest:
 ## Workflow: Lint
 
 **Triggers**: "review", "check", "what's wrong with", "lint", "analyze",
-"any issues in", "fix", "clean up", "auto-fix", "fix linting", "audit",
-"project scan", "full analysis", "scan the whole project", "overall code
-quality".
+"any issues in", "fix", "clean up", "auto-fix", "fix linting", "audit my
+project", "project scan", "full analysis", "scan the whole project", "overall
+code quality".
 
 Use this workflow for file, directory, and project-level code quality checks.
 Plain audit/project scan requests route here, not to Architecture Review.
+Bare "full audit" routes to Comprehensive Review. Qualified architecture
+requests such as "architecture full audit" and "structural audit" route to
+Architecture Review.
 
 ### Scope and mode
 
@@ -340,12 +344,13 @@ Filtering:
 
 ## Workflow: Architecture Review
 
-**Triggers**: "architecture review", "review architecture", "arch audit", "find
-god modules", "find hub modules", "layering violations", "coupling metrics",
-"instability", "module coupling", "show me the structure", "onboard me to this
-codebase", "check complexity", "find complex functions", "cyclomatic
-complexity", "cognitive complexity", "circular dependencies", "circular
-imports", "dependency graph", "find cycles", "orphan modules".
+**Triggers**: "architecture review", "review architecture", "arch audit",
+"architecture full audit", "structural audit", "find god modules", "find hub
+modules", "layering violations", "coupling metrics", "instability", "module
+coupling", "show me the structure", "onboard me to this codebase", "check
+complexity", "find complex functions", "cyclomatic complexity", "cognitive
+complexity", "circular dependencies", "circular imports", "dependency graph",
+"find cycles", "orphan modules".
 
 Architecture Review has three modes:
 
@@ -353,9 +358,9 @@ Architecture Review has three modes:
 |---------|------|
 | complexity only | focused complexity |
 | cycles/dependencies only | focused cycles |
-| architecture/audit/onboarding/coupling/layers | full audit |
+| architecture/audit/onboarding/coupling/layers | full structural audit |
 
-### Full audit mode
+### Full structural audit mode
 
 Produces a structured report with cycles, layering violations, hub/god modules,
 instability hotspots, deep import chains, oversized files, excessive exports,
@@ -513,6 +518,75 @@ Security Scan does not modify the project. Suppression edits such as
 `// nosemgrep` or `# pragma: allowlist secret` are user actions unless the user
 explicitly asks for edits.
 
+## Workflow: Comprehensive Review
+
+**Triggers**: "comprehensive review", "full audit", "review with all features",
+"maximum coverage review".
+
+Comprehensive Review is the read-only, maximum-coverage workflow. Use it when
+the user asks for a broad all-feature review. Do not use auto-fix, set up
+linters, edit suppressions, or modify project files in this workflow.
+
+Trigger precedence:
+- Bare "full audit" routes here.
+- "Architecture review", "architecture full audit", and "structural audit"
+  route to Architecture Review.
+- Existing lint-focused phrases such as "audit my project", "project scan",
+  and "full analysis" stay in Lint project audit mode.
+
+### Steps
+
+1. Run detection:
+   ```bash
+   bash <skill-dir>/scripts/detect-linter.sh [project-path]
+   ```
+2. Run project-level Lint in analyze mode, including explicit cyclomatic and
+   cognitive complexity checks. Do not run native fix commands.
+3. If `TYPE_CHECKER` is not `none`, run Type Check. If unavailable, record a
+   skipped status with the reason.
+4. Run Architecture Review in full structural audit mode, including tests:
+   ```bash
+   bash <skill-dir>/scripts/arch-review.sh \
+     --project-root "$PROJECT_ROOT" \
+     --language "$LANGUAGE" \
+     --framework "$FRAMEWORK" \
+     --include-tests
+   ```
+5. Run Security Scan with the default Semgrep `p/security-audit` config plus
+   detect-secrets:
+   ```bash
+   bash <skill-dir>/scripts/security-scan.sh \
+     --project-root "$PROJECT_ROOT" \
+     --language "$LANGUAGE" \
+     --semgrep-config p/security-audit
+   ```
+6. Scan the full target, but cap displayed findings using the existing workflow
+   limits: 50 lint/type findings, 50 architecture findings, and 200 security
+   findings per security section. Always state total counts and whether output
+   was truncated.
+
+### Report format
+
+Return one user-facing Comprehensive Review report with sections in this order:
+- Summary: overall status, elapsed time, tools detected, files/targets scanned,
+  total findings by severity, and section status counts.
+- Lint and complexity: status, elapsed time, skipped/error reason if any, total
+  counts, top findings, auto-fixable count, and manual-only complexity count.
+- Type check: status, elapsed time, skipped/error reason if any, total counts,
+  and top diagnostics.
+- Architecture Review: status, elapsed time, skipped/error reason if any, total
+  counts by section/severity, and top structural findings.
+- Security Scan: status, elapsed time, skipped/error reason if any, Semgrep and
+  detect-secrets counts, and top findings.
+- Recommended next actions: prioritize blockers/secrets/security first, then
+  type errors, cycles/architecture risks, high-complexity refactors, and
+  auto-fixable lint.
+
+Status values are `clean`, `found`, `skipped`, or `error`. Treat command exit
+codes that mean "findings found" as `found`, not `error`. Include concrete
+skip/error reasons so the user can distinguish unsupported language, missing
+tooling, and runtime failures.
+
 ## Workflow: Linter Setup
 
 **Triggers**: "set up linting", "configure eslint", "configure ruff", "add a
@@ -669,7 +743,7 @@ Load references based on the detected tool or requested workflow:
 | `<skill-dir>/references/pyright.md` | Type Check with pyright |
 | `<skill-dir>/references/madge.md` | Architecture Review focused cycles for JS/TS |
 | `<skill-dir>/references/pydeps.md` | Architecture Review focused cycles for Python |
-| `<skill-dir>/references/architecture.md` | Architecture Review full audit |
+| `<skill-dir>/references/architecture.md` | Architecture Review full structural audit |
 | `<skill-dir>/references/knip.md` | Architecture Review dead-code section for JS/TS |
 | `<skill-dir>/references/vulture.md` | Architecture Review dead-code section for Python |
 | `<skill-dir>/references/cognitive-complexity.md` | Lint or Architecture Review complexity findings |
