@@ -4,7 +4,7 @@
 
 _Most creatures with a three-metre spike protruding from their face would use it for something dramatic. Jousting, perhaps, or opening letters in a threatening manner. The narwhal instead uses it to poke at things in cold, dark water where nobody is watching, which is more or less what this skill does to your code at two in the morning. It will find the unused variable you left in a file you forgot existed. It will notice that module A imports module B which imports module C which imports module A. It will not be thanked for this, and it does not expect to be._
 
-A code quality skill for AI agents. Linting, type checking, complexity analysis, security scanning, and architecture review using whatever tools your project already has.
+A code quality skill for AI agents. Linting, type checking, complexity analysis, security scanning, comprehensive review, and architecture review using whatever tools your project already has.
 
 ## What It Does
 
@@ -94,7 +94,7 @@ Runs `npx pyright` for Python or `npx tsc --noEmit` for TypeScript and normalize
 
 ### Architecture Review
 
-**Triggers**: "architecture review", "check complexity", "find complex functions", "find circular dependencies", "find cycles", "orphan modules", "find hub modules", "layering violations", "coupling metrics", "show me the structure", "onboard me to this codebase"
+**Triggers**: "architecture review", "architecture full audit", "structural audit", "check complexity", "find complex functions", "find circular dependencies", "find cycles", "orphan modules", "find hub modules", "layering violations", "coupling metrics", "show me the structure", "onboard me to this codebase"
 
 Architecture Review has three modes:
 
@@ -102,7 +102,7 @@ Architecture Review has three modes:
 |---------|------|
 | complexity only | focused complexity |
 | cycles/dependencies only | focused cycles |
-| architecture/audit/onboarding/coupling/layers | full audit |
+| architecture/audit/onboarding/coupling/layers | full structural audit |
 
 Focused complexity reports both cyclomatic and cognitive complexity in a single table. Cognitive is the headline metric because it tracks human reading effort by penalizing nesting and sequence breaks. Cyclomatic stays as a secondary column for test coverage planning.
 
@@ -113,7 +113,7 @@ Focused complexity reports both cyclomatic and cognitive complexity in a single 
 
 Focused cycles detects circular imports (CRITICAL) and orphan modules (INFO). Uses `npx madge` for JS/TS and `uvx depcycle` for Python, both zero-install.
 
-A full structural audit with ten sections, intended for audits and onboarding. A Python orchestrator runs all sections in parallel and returns a single JSON report.
+A full structural audit with ten sections, intended for architecture audits and onboarding. A Python orchestrator runs all sections in parallel and returns a single JSON report.
 
 | Section | What it detects |
 |---------|----------------|
@@ -141,6 +141,16 @@ Runs two tools in parallel (both zero-install via `uvx`):
 
 Default exclude list: `.git/`, `node_modules/`, `dist/`, `build/`, `venv/`, lockfiles, `*.min.js`, `*.map`. Use `--skip-section semgrep` or `--skip-section secrets` to run only one tool. Findings capped at 200 per section with `truncated: true` when exceeded.
 
+### Comprehensive Review
+
+**Triggers**: "comprehensive review", "full audit", "review with all features", "maximum coverage review"
+
+Runs the read-only maximum-coverage review: project-level lint plus explicit cyclomatic and cognitive complexity, type check when available, Architecture Review with tests included, and Security Scan with Semgrep `p/security-audit` plus detect-secrets. It does not auto-fix, set up linters, edit suppressions, or modify project files.
+
+Use bare `full audit` for this all-feature workflow. Use `architecture full audit` or `structural audit` when you only want Architecture Review. Existing phrases such as `audit my project`, `project scan`, and `full analysis` remain lint-focused project audits.
+
+The report shows every section with status, elapsed time, skipped/error reasons, total counts, top findings, and recommended next actions. It scans the whole target while keeping displayed findings capped by the existing workflow limits.
+
 ### Linter Setup
 
 **Triggers**: "set up linting", "configure eslint", "configure ruff", "add a linter to my project", "set up biome"
@@ -162,6 +172,9 @@ Once installed, the skill triggers automatically when you describe what you want
 > security scan this project
 > any hardcoded secrets in this repo?
 > OWASP scan src/
+> comprehensive review
+> full audit
+> review with all features
 > find circular dependencies in src/
 > check for orphan modules
 > review the architecture of this project
@@ -230,7 +243,7 @@ code-quality-skill/
 │   └── marketplace.json       # Self-hosted marketplace definition
 ├── skills/
 │   └── code-quality/
-│       ├── SKILL.md           # Core skill definition (six named workflows)
+│       ├── SKILL.md           # Core skill definition (seven named workflows)
 │       ├── scripts/
 │       │   ├── detect-linter.sh      # Auto-detect linter + framework
 │       │   ├── arch-review.sh        # Wrapper for the architecture-review orchestrator
