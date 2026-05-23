@@ -317,20 +317,27 @@ def run_complexity_check(
     if metric == "both":
         cyc = _run_cyclomatic(project_root, language, timeout)
         cog = _run_cognitive(project_root, language, timeout)
-        if cyc["status"] == "error" and cog["status"] == "error":
-            return {"status": "error", "reason": f"both metrics failed: {cyc.get('reason', '')} / {cog.get('reason', '')}"}
-        cyc_findings = cyc.get("findings", []) if cyc["status"] in ("ok", "found") else []
-        cog_findings = cog.get("findings", []) if cog["status"] in ("ok", "found") else []
+        cyc_ok = cyc["status"] in ("ok", "found")
+        cog_ok = cog["status"] in ("ok", "found")
+        # If neither backend produced usable output, surface skipped/error
+        # explicitly so callers (e.g. Workflow I) don't render "Code is
+        # well-structured" when nothing actually ran.
+        if not cyc_ok and not cog_ok:
+            reasons: List[str] = []
+            if cyc["status"] != "ok":
+                reasons.append(f"cyclomatic {cyc['status']}: {cyc.get('reason', '')}")
+            if cog["status"] != "ok":
+                reasons.append(f"cognitive {cog['status']}: {cog.get('reason', '')}")
+            status = "error" if "error" in (cyc["status"], cog["status"]) else "skipped"
+            return {"status": status, "reason": "; ".join(reasons)}
+        cyc_findings = cyc.get("findings", []) if cyc_ok else []
+        cog_findings = cog.get("findings", []) if cog_ok else []
         merged = _merge_dual(cyc_findings, cog_findings)
         warnings: List[str] = []
-        if cyc["status"] == "skipped":
-            warnings.append(f"cyclomatic skipped: {cyc.get('reason', '')}")
-        elif cyc["status"] == "error":
-            warnings.append(f"cyclomatic error: {cyc.get('reason', '')}")
-        if cog["status"] == "skipped":
-            warnings.append(f"cognitive skipped: {cog.get('reason', '')}")
-        elif cog["status"] == "error":
-            warnings.append(f"cognitive error: {cog.get('reason', '')}")
+        if not cyc_ok:
+            warnings.append(f"cyclomatic {cyc['status']}: {cyc.get('reason', '')}")
+        if not cog_ok:
+            warnings.append(f"cognitive {cog['status']}: {cog.get('reason', '')}")
         return {
             "status": "found" if merged else "ok",
             "findings": merged,

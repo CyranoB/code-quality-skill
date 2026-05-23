@@ -66,10 +66,25 @@ def run_detect_secrets(
     # paths are passed as relative ("."). Passing an absolute path from outside
     # returns empty results — see GitHub issue history. Mitigate by running
     # from inside the project root.
+    #
+    # File input handling: subprocess refuses cwd=<file>, so when the caller
+    # passes a single file (the documented "audit one file" flow), use the
+    # parent directory as cwd and scan just the basename instead of ".".
+    resolved = project_root.resolve()
+    if resolved.is_file():
+        scan_cwd = resolved.parent
+        scan_target = resolved.name
+        # Path-stripping in _parse compares against scan_cwd, not the file path.
+        strip_root = scan_cwd
+    else:
+        scan_cwd = resolved
+        scan_target = "."
+        strip_root = resolved
+
     cmd: List[str] = ["uvx", "detect-secrets", "scan", "--all-files"]
     if exclude_regex:
         cmd.extend(["--exclude-files", exclude_regex])
-    cmd.append(".")
+    cmd.append(scan_target)
 
     try:
         proc = subprocess.run(
@@ -77,7 +92,7 @@ def run_detect_secrets(
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=str(project_root.resolve()),
+            cwd=str(scan_cwd),
         )
     except subprocess.TimeoutExpired:
         return {"status": "error", "reason": f"detect-secrets timed out after {timeout}s"}
@@ -90,7 +105,7 @@ def run_detect_secrets(
             "reason": (proc.stderr.strip() or "detect-secrets failed").splitlines()[-1][:500],
         }
 
-    findings = _parse(proc.stdout, project_root)
+    findings = _parse(proc.stdout, strip_root)
     truncated = len(findings) > max_findings
     if truncated:
         findings = findings[:max_findings]

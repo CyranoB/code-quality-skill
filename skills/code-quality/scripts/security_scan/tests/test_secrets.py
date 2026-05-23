@@ -72,5 +72,44 @@ class RunDetectSecretsSkipsTest(unittest.TestCase):
             ss.shutil.which = original
 
 
+class SingleFileInputTest(unittest.TestCase):
+    """When the caller passes a file path (not a directory), the wrapper must
+    use the parent as cwd and scan just the basename — subprocess refuses
+    cwd=<file>. Documented in SKILL.md Workflow J followups."""
+
+    def test_file_path_uses_parent_as_cwd_and_basename_as_target(self) -> None:
+        import tempfile
+        import security_scan.secrets as ss
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured["cwd"] = kwargs.get("cwd")
+
+            class R:
+                returncode = 0
+                stdout = '{"results": {}}'
+                stderr = ""
+            return R()
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp_file = Path(td) / "config.py"
+            tmp_file.write_text("FAKE_KEY = 'abc'\n")
+            orig_which = ss.shutil.which
+            orig_run = ss.subprocess.run
+            ss.shutil.which = lambda x: "/usr/bin/uvx"
+            ss.subprocess.run = fake_run
+            try:
+                ss.run_detect_secrets(tmp_file)
+            finally:
+                ss.shutil.which = orig_which
+                ss.subprocess.run = orig_run
+
+        self.assertEqual(captured["cwd"], str(tmp_file.parent.resolve()))
+        # Target is the basename, not "." (which would scan the whole directory).
+        self.assertEqual(captured["cmd"][-1], "config.py")
+
+
 if __name__ == "__main__":
     unittest.main()

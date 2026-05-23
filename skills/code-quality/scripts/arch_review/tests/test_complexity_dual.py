@@ -160,5 +160,80 @@ class SeverityForTest(unittest.TestCase):
         self.assertEqual(severity_for(finding), "CRITICAL")
 
 
+class RunBothBackendUnavailableTest(unittest.TestCase):
+    """Verifies that metric='both' surfaces skipped/error when neither
+    backend produced output — protects Workflow I from rendering 'clean'
+    when no tool actually ran."""
+
+    def _patch_backends(self, cyc_result, cog_result):
+        from unittest import mock
+        from arch_review import complexity
+        return (
+            mock.patch.object(complexity, "_run_cyclomatic", return_value=cyc_result),
+            mock.patch.object(complexity, "_run_cognitive", return_value=cog_result),
+        )
+
+    def test_both_skipped_returns_skipped(self) -> None:
+        from arch_review.complexity import run_complexity_check
+        p_cyc, p_cog = self._patch_backends(
+            {"status": "skipped", "reason": "ruff missing"},
+            {"status": "skipped", "reason": "uvx missing"},
+        )
+        with p_cyc, p_cog:
+            out = run_complexity_check(__import__("pathlib").Path("/tmp"), "python", metric="both")
+        self.assertEqual(out["status"], "skipped")
+        self.assertIn("ruff missing", out["reason"])
+        self.assertIn("uvx missing", out["reason"])
+
+    def test_both_errored_returns_error(self) -> None:
+        from arch_review.complexity import run_complexity_check
+        p_cyc, p_cog = self._patch_backends(
+            {"status": "error", "reason": "ruff crashed"},
+            {"status": "error", "reason": "flake8 crashed"},
+        )
+        with p_cyc, p_cog:
+            out = run_complexity_check(__import__("pathlib").Path("/tmp"), "python", metric="both")
+        self.assertEqual(out["status"], "error")
+        self.assertIn("ruff crashed", out["reason"])
+        self.assertIn("flake8 crashed", out["reason"])
+
+    def test_skipped_plus_errored_returns_error(self) -> None:
+        from arch_review.complexity import run_complexity_check
+        p_cyc, p_cog = self._patch_backends(
+            {"status": "skipped", "reason": "ruff missing"},
+            {"status": "error", "reason": "flake8 crashed"},
+        )
+        with p_cyc, p_cog:
+            out = run_complexity_check(__import__("pathlib").Path("/tmp"), "python", metric="both")
+        self.assertEqual(out["status"], "error")
+
+    def test_one_ok_one_skipped_returns_findings_with_warning(self) -> None:
+        from arch_review.complexity import run_complexity_check
+        cyc_finding = {"file": "/a.py", "line": 10, "function": "foo", "complexity": 15, "threshold": 10}
+        p_cyc, p_cog = self._patch_backends(
+            {"status": "found", "findings": [cyc_finding]},
+            {"status": "skipped", "reason": "uvx missing"},
+        )
+        with p_cyc, p_cog:
+            out = run_complexity_check(__import__("pathlib").Path("/tmp"), "python", metric="both")
+        self.assertEqual(out["status"], "found")
+        self.assertEqual(len(out["findings"]), 1)
+        warnings = out.get("warnings", [])
+        self.assertTrue(any("uvx missing" in w for w in warnings))
+
+    def test_both_ok_empty_returns_ok(self) -> None:
+        from arch_review.complexity import run_complexity_check
+        p_cyc, p_cog = self._patch_backends(
+            {"status": "ok", "findings": []},
+            {"status": "ok", "findings": []},
+        )
+        with p_cyc, p_cog:
+            out = run_complexity_check(__import__("pathlib").Path("/tmp"), "python", metric="both")
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["findings"], [])
+        # Both ran successfully — no warnings.
+        self.assertEqual(out.get("warnings", []), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,8 +16,25 @@
 // pass owns that surface with deeper, cross-language coverage.
 
 import sonarjs from 'eslint-plugin-sonarjs';
+import tsParser from '@typescript-eslint/parser';
 
 export default [
+  // TS/TSX files: route through @typescript-eslint/parser so type annotations,
+  // generics, interface declarations, etc. don't trigger a fatal parse error.
+  // Without this, ESLint uses Espree and silently emits `{ruleId: null,
+  // fatal: true}` messages — the skill's complexity parser ignores those by
+  // ruleId, which would mean Workflow E/I reports "clean" on real TS code.
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+        ecmaFeatures: { jsx: true },
+      },
+    },
+  },
   {
     files: ["**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.ts", "**/*.tsx"],
     plugins: {
