@@ -1,16 +1,30 @@
-// Default ESLint configuration for the code-quality skill
-// Used when no project-level ESLint config is found
-// Inspired by SonarQube "Sonar way" quality profile
+// Default ESLint configuration for the code-quality skill.
+// Used by Workflow E (cognitive complexity) and Workflow I (complex_functions)
+// on JS/TS targets via scripts/eslint-defaults.sh.
 //
-// To override: create an eslint.config.js in your project
+// NOTE: This config is NOT the JS/TS fallback for Workflows A/C/D — Biome
+// remains the fallback there (faster, native TS, no parser plugins needed).
+// See SKILL.md "Default Configs" for the rationale.
 //
-// Uses only core ESLint rules (no plugins required)
+// To override: create an eslint.config.js in your project.
+//
+// Inspired by SonarQube "Sonar way" quality profile. Core ESLint rules cover
+// the common errors and style; eslint-plugin-sonarjs adds cognitive complexity
+// and a small curated set of high-signal code smells.
+//
+// Security hotspots are intentionally NOT covered here — Workflow J's Semgrep
+// pass owns that surface with deeper, cross-language coverage.
+
+import sonarjs from 'eslint-plugin-sonarjs';
 
 export default [
   {
-    files: ["**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx"],
+    files: ["**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.ts", "**/*.tsx"],
+    plugins: {
+      sonarjs,
+    },
     rules: {
-      // --- Possible errors ---
+      // --- Possible errors (core ESLint) ---
       "no-constant-condition": "error",
       "no-duplicate-case": "error",
       "no-empty": "warn",
@@ -22,7 +36,7 @@ export default [
       "no-unsafe-finally": "error",
       "no-unused-vars": "warn",
 
-      // --- Best practices ---
+      // --- Best practices (core ESLint) ---
       "eqeqeq": "warn",
       "no-eval": "error",
       "no-implied-eval": "error",
@@ -35,8 +49,19 @@ export default [
       "prefer-const": "warn",
       "no-var": "warn",
 
-      // --- Cyclomatic complexity ---
+      // --- Cyclomatic complexity (core ESLint) ---
       "complexity": ["warn", 10],
+
+      // --- Cognitive complexity & code smells (sonarjs) ---
+      // Threshold 15 matches SonarQube's "Sonar way" default. Severity in the
+      // skill report is driven by the measured value (16-25 MAJOR, 26+ CRITICAL),
+      // not by the "warn" level here. See references/severity-map.md.
+      "sonarjs/cognitive-complexity": ["warn", 15],
+      "sonarjs/no-duplicate-string": ["warn", { "threshold": 5 }],
+      "sonarjs/no-identical-functions": "warn",
+      "sonarjs/no-collapsible-if": "warn",
+      "sonarjs/no-redundant-boolean": "warn",
+      "sonarjs/prefer-immediate-return": "warn",
 
       // --- Debug artifacts ---
       "no-console": "warn",
