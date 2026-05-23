@@ -288,13 +288,18 @@ Analyzes module dependency structure to find circular dependencies and orphan mo
 
 ### Steps
 
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE` and `PROJECT_ROOT`.
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE`, `TYPESCRIPT`, `FRAMEWORK`, and `PROJECT_ROOT`. Note: `LANGUAGE=javascript` covers both JS and TS — check `TYPESCRIPT=true` (i.e. a `tsconfig.json` exists) to decide whether to pass `--ts-config` and `--extensions ts,tsx`.
 2. **Load reference** based on `LANGUAGE`:
    - `javascript` → read `<skill-dir>/references/madge.md`
    - `python` → read `<skill-dir>/references/pydeps.md`
-3. **Determine entry point**: Use the target path from the user's request. If none specified:
-   - For **TypeScript** projects (tsconfig.json exists): Find the main entry file — check `package.json` `main`/`module` fields, or look for `src/index.ts`, `src/server.ts`, `src/main.ts`, `src/app.ts`. **Always use a file entry point for TS** — passing just a directory often finds 0 files.
-   - For **JavaScript** projects: `src/` directory works fine.
+3. **Determine entry point**: Use the target path from the user's request. If none specified, pick what fits the project layout:
+   - **Single-entry TypeScript apps** (Node services, libraries): use a file entry point. Check `package.json` `main`/`module`, then look for `src/index.ts`, `src/server.ts`, `src/main.ts`, `src/app.ts`. A file entry resolves transitively and gives the cleanest graph.
+   - **Framework projects with no single entry** (Next.js, Remix, SvelteKit, Astro, etc.): there is no `src/index.ts` — the framework owns routing. Scan the source directory instead: `app/` for Next.js App Router, `pages/` for Next.js Pages Router, `src/` for Vite/CRA/SvelteKit. If `tsconfig.json` exists at the project root, this is still TypeScript — keep `--ts-config` and `--extensions ts,tsx`.
+   - **Multi-root projects**: if top-level dirs like `components/` or `lib/` aren't reached from the main entry, scan each separately so isolated cycles aren't missed.
+   - **JavaScript projects**: `src/` (or whatever the source directory is) works fine as a directory entry.
+
+   When unsure, run once and check the file count: `npx madge --json <entry> | jq 'length'`. If it returns 0 or far fewer files than you expect, the entry is wrong — try a directory or a different file.
+
 4. **Run circular dependency check**:
 
    **JavaScript (madge)**:
@@ -302,12 +307,25 @@ Analyzes module dependency structure to find circular dependencies and orphan mo
    npx madge --circular --json src/
    ```
 
-   **TypeScript (madge)** — must use file entry point + `--extensions`:
+   **TypeScript with single entry**:
    ```bash
    npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx src/index.ts
    ```
 
+   **TypeScript framework project (Next.js App Router shown)**:
+   ```bash
+   npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx app/
+   ```
+
    Parse JSON output: array of cycles, each cycle is an array of file paths. Empty `[]` = clean. Exit code 1 = cycles found (expected).
+
+   **If madge errors with `Missing script: "madge"` or warnings about unknown npm flags** (`Unknown cli config "--circular"`, etc.): the `npx` invocation is being intercepted — typically by a shell alias, a hook that rewrites `npx` to `npm`, or an RTK-style proxy. The error message comes from npm, not madge. Bypass by calling npx directly:
+   ```bash
+   command npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx app/
+   # or with the absolute path:
+   $(which npx) madge --circular --json --ts-config tsconfig.json --extensions ts,tsx app/
+   ```
+   `command npx` skips aliases and most pre-tool-use rewriters. Don't conclude that madge is missing or that the project is broken — verify by running `command npx madge --version` first.
 
    **Python (depcycle)**:
    ```bash

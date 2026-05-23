@@ -21,8 +21,10 @@ Auto-detects the linter for a project and outputs key=value pairs:
   FIX_COMMAND       - Full command to auto-fix issues
   CONFIG            - Path to detected config file (empty if fallback)
   LANGUAGE          - Primary language (javascript, python)
+  TYPESCRIPT        - "true" if a tsconfig.json exists at the project root
   FALLBACK          - "true" if no explicit config found
   PROJECT_ROOT      - Detected project root directory
+  FRAMEWORK         - Detected framework (nextjs, nestjs, django, fastapi, flask, express, none)
   FILES             - Space-separated file list (only with --changed-only)
   TYPE_CHECKER      - Type checker (pyright, tsc, none)
   TYPE_CHECK_COMMAND - Full command to run type checking
@@ -102,7 +104,7 @@ pyproject_has_section() {
 detect_framework() {
   local root="$1"
 
-  if ls "$root"/next.config.{js,ts,mjs} >/dev/null 2>&1; then
+  if compgen -G "$root/next.config.*" >/dev/null 2>&1; then
     echo "nextjs"
     return
   fi
@@ -368,6 +370,7 @@ else
   echo "FIX_COMMAND="
   echo "CONFIG="
   echo "LANGUAGE=unknown"
+  echo "TYPESCRIPT=false"
   echo "FALLBACK=true"
   echo "PROJECT_ROOT=$PROJECT_ROOT"
   echo "TYPE_CHECKER=none"
@@ -384,6 +387,14 @@ echo "PROJECT_ROOT=$PROJECT_ROOT"
 LANG_LINE="$(echo "$OUTPUT" | grep "^LANGUAGE=")"
 DETECTED_LANG="${LANG_LINE#LANGUAGE=}"
 detect_type_checker "$DETECTED_LANG"
+
+# TypeScript signal — emitted for any JS project that has a tsconfig.json so
+# Workflow F (and others) can pick the right madge flags without re-detecting.
+if [[ "$DETECTED_LANG" == "javascript" ]] && has_file "tsconfig.json"; then
+  echo "TYPESCRIPT=true"
+else
+  echo "TYPESCRIPT=false"
+fi
 
 # Changed files
 if [[ "$CHANGED_ONLY" == "true" ]]; then
