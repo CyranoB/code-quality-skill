@@ -1,0 +1,16 @@
+{
+  "name": "code-quality-skill-defaults",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bundled ESLint + sonarjs plugin for Workflow E (cognitive complexity) and Workflow I (complex_functions). Not used for general A/C/D lint — Biome remains the JS/TS fallback there.",
+  "devDependencies": {
+    "eslint": "^9.18.0",
+    "eslint-plugin-sonarjs": "^3.0.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "typescript-eslint": "^8.20.0"
+  },
+  "overrides": {
+    "minimatch": "^10.2.3"
+  }
+}

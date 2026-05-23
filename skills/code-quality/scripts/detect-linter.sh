@@ -28,6 +28,10 @@ Auto-detects the linter for a project and outputs key=value pairs:
   FILES             - Space-separated file list (only with --changed-only)
   TYPE_CHECKER      - Type checker (pyright, tsc, none)
   TYPE_CHECK_COMMAND - Full command to run type checking
+  COGNITIVE_COMMAND - Command for cognitive complexity (Workflow E/I), per LANGUAGE
+  SEMGREP_AVAILABLE - "true" if uvx is on PATH (Workflow J semgrep)
+  SECRETS_TOOL      - Secret scanner: detect-secrets, gitleaks, or none (Workflow J)
+  ESLINT_DEFAULTS_CMD - Wrapper that runs the skill's bundled ESLint+sonarjs (Workflow E/I, JS/TS)
 
 Options:
   --changed-only  Only list files changed in git (staged + unstaged)
@@ -377,6 +381,18 @@ else
   echo "TYPE_CHECK_COMMAND="
   echo "FILES="
   echo "FRAMEWORK=$(detect_framework "$PROJECT_ROOT")"
+  echo "ESLINT_DEFAULTS_CMD=bash $SCRIPT_DIR/eslint-defaults.sh"
+  echo "COGNITIVE_COMMAND="
+  if command -v uvx >/dev/null 2>&1; then
+    echo "SEMGREP_AVAILABLE=true"
+    echo "SECRETS_TOOL=detect-secrets"
+  elif command -v gitleaks >/dev/null 2>&1; then
+    echo "SEMGREP_AVAILABLE=false"
+    echo "SECRETS_TOOL=gitleaks"
+  else
+    echo "SEMGREP_AVAILABLE=false"
+    echo "SECRETS_TOOL=none"
+  fi
   exit 1
 fi
 
@@ -412,3 +428,44 @@ fi
 
 # Framework hint (used by Workflow I).
 echo "FRAMEWORK=$(detect_framework "$PROJECT_ROOT")"
+
+# --- Cognitive complexity (Workflow E / Workflow I) ---
+# Build a per-language command that produces cognitive complexity findings.
+# JS/TS: ESLint + eslint-plugin-sonarjs via the bundled wrapper.
+# Python: flake8 + flake8-cognitive-complexity via uvx (text output, regex-parsed).
+ESLINT_DEFAULTS_CMD="bash $SCRIPT_DIR/eslint-defaults.sh"
+echo "ESLINT_DEFAULTS_CMD=$ESLINT_DEFAULTS_CMD"
+
+case "$DETECTED_LANG" in
+  javascript)
+    # JSON for --rule is wrapped in single quotes so a downstream `eval` of this
+    # COGNITIVE_COMMAND preserves the JSON as a single argument (avoids brace
+    # expansion of '{' and '['). Use the bundled eslint.config.js which loads
+    # eslint-plugin-sonarjs.
+    echo "COGNITIVE_COMMAND=$ESLINT_DEFAULTS_CMD --no-config-lookup --config $DEFAULTS_DIR/eslint.config.js --rule '{\"complexity\":[\"warn\",10],\"sonarjs/cognitive-complexity\":[\"warn\",15]}' --format json"
+    ;;
+  python)
+    echo "COGNITIVE_COMMAND=uvx --with flake8-cognitive-complexity flake8 --select=CCR001 --max-cognitive-complexity=15"
+    ;;
+  *)
+    echo "COGNITIVE_COMMAND="
+    ;;
+esac
+
+# --- Security scan (Workflow J) ---
+# Semgrep runs via uvx (zero-install). Mark availability based on uvx presence.
+if command -v uvx >/dev/null 2>&1; then
+  echo "SEMGREP_AVAILABLE=true"
+else
+  echo "SEMGREP_AVAILABLE=false"
+fi
+
+# Secret scanner: prefer detect-secrets (uvx, zero-install), fall back to gitleaks
+# if the user has it installed locally. Documented alternatives in references/secrets.md.
+if command -v uvx >/dev/null 2>&1; then
+  echo "SECRETS_TOOL=detect-secrets"
+elif command -v gitleaks >/dev/null 2>&1; then
+  echo "SECRETS_TOOL=gitleaks"
+else
+  echo "SECRETS_TOOL=none"
+fi
