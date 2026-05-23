@@ -2,3 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Lazy-installed bundled ESLint plugins for Workflow E/I on JS/TS.
+# Created on first invocation of scripts/eslint-defaults.sh.
+skills/code-quality/defaults/node_modules/

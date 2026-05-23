@@ -107,3 +107,50 @@ tsc output lines contain `error TSxxxx` or (rarely) `warning TSxxxx`. Type error
 | Circular dependency (JS/TS) | CRITICAL | Runtime TDZ crashes, breaks tree-shaking, signals tight coupling |
 | Circular dependency (Python) | CRITICAL | `ImportError` at runtime, signals tight coupling between modules |
 | Orphan module | INFO | Dead code — not harmful but indicates unused files |
+
+## Cognitive Complexity
+
+Cognitive complexity (Sonar-style; sources: `sonarjs/cognitive-complexity` for
+JS/TS, `flake8-cognitive-complexity` CCR001 for Python) drives the severity for
+Workflow E findings when measured. The threshold is 15 (matching SonarQube's
+"Sonar way" default); above that, severity scales with the measured value:
+
+| Measured cognitive | Normalized | Rationale |
+|--------------------|------------|-----------|
+| ≤ 15 | clean | At or below threshold — no finding emitted |
+| 16 – 25 | MAJOR | Above threshold but still tractable to refactor |
+| ≥ 26 | CRITICAL | High defect-density correlation; readability significantly impaired |
+
+Cyclomatic complexity (`ruff C901`, ESLint core `complexity`) stays at MAJOR for
+any reported violation — the tool itself only emits above the configured cap
+(default 10). When both metrics are present on the same function, cognitive
+drives the severity tag and cyclomatic appears as a secondary column.
+
+The raw severity field set by the linter (e.g., ESLint `"warn"` → 1) is
+**ignored** for these rules — what matters is the measured value, not the
+configured severity level.
+
+## Semgrep (Workflow J)
+
+| Native Severity | Normalized | Rationale |
+|-----------------|------------|-----------|
+| ERROR           | BLOCKER    | Clear vulnerabilities (command injection, SQL injection, auth bypass) |
+| WARNING         | CRITICAL   | Likely vulnerabilities (taint flows, dangerous APIs, weak crypto) |
+| INFO            | MAJOR      | Security smells — worth attention but not always actionable |
+
+Unknown severity strings fall back to MAJOR. Semgrep's `extra.metadata.cwe`
+field is preserved verbatim in the finding (joined to a comma-separated string
+if the source provides a list) so users can cross-reference with their threat
+model.
+
+## Secret Scanning (Workflow J)
+
+| Finding | Normalized | Rationale |
+|---------|------------|-----------|
+| Any detect-secrets finding | BLOCKER | A committed credential is leaked regardless of plugin source — rotate the secret and remove from history |
+| Any gitleaks finding (alternative tool) | BLOCKER | Same rationale |
+
+There is no severity gradient: the secret either exists in the repo or it
+doesn't. Users can suppress individual lines with `# pragma: allowlist secret`
+(detect-secrets) or `# gitleaks:allow` (gitleaks) — see `references/secrets.md`
+for the false-positive triage playbook.

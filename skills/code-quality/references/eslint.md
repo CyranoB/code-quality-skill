@@ -152,3 +152,62 @@ rules: { "complexity": ["error", 15] }  // error at 15
 - Use `--max-warnings 0` to treat warnings as errors
 - For monorepos, run from the package directory, not the root
 - ESLint respects `.gitignore` by default in flat config mode
+
+## Running with skill defaults & bundled plugins
+
+Workflows that need rules from `eslint-plugin-sonarjs` (Workflow E for
+cognitive complexity, Workflow I for `complex_functions`) invoke ESLint via
+the bundled wrapper, **not** plain `npx eslint`:
+
+```bash
+bash <skill-dir>/scripts/eslint-defaults.sh \
+  --no-config-lookup \
+  --config <skill-dir>/defaults/eslint.config.js \
+  --rule '{"sonarjs/cognitive-complexity":["warn",15]}' \
+  --format json <files>
+```
+
+`detect-linter.sh` emits this command shape ready-to-use as
+`COGNITIVE_COMMAND` (JS/TS) and the wrapper path as `ESLINT_DEFAULTS_CMD`.
+
+### Why a wrapper instead of `npx --prefix`
+
+`npx --prefix DIR pkg` does **not** install devDependencies declared in
+`DIR/package.json`. To make the bundled plugins resolvable, the skill needs an
+explicit `npm ci --prefix DIR` first. The wrapper at
+`scripts/eslint-defaults.sh` handles this:
+
+1. Check whether `defaults/node_modules/.bin/eslint` exists
+2. If not, run `npm ci --prefix defaults/` (falls back to `npm install` when
+   there's no lockfile)
+3. Exec `defaults/node_modules/.bin/eslint "$@"`
+
+First-run cost: ~10–20s and ~30MB into `defaults/node_modules` (gitignored).
+Subsequent calls are instant.
+
+### Scope: only for Workflow E / I
+
+The bundled ESLint is **not** the JS/TS fallback for Workflows A/C/D — those
+keep using Biome (faster, native TS, no parser plugins needed). Bundling
+ESLint+sonarjs for general lint would slow every Workflow A invocation. The
+narrower scope means cognitive complexity and the curated sonarjs code-smell
+rules surface only when the user explicitly asks for complexity analysis or
+architecture review.
+
+If the user wants sonarjs rules during normal linting, they should install
+`eslint-plugin-sonarjs` in their own project's `package.json` — the project's
+ESLint config will pick it up via Workflow A/C/D's normal detection path.
+
+### Flat-config `cwd` requirement
+
+ESLint flat config silently ignores files "outside the base path" of the
+current working directory. Always invoke the wrapper with `cwd` set to (or
+under) the project being analyzed:
+
+```bash
+cd /path/to/project
+bash <skill-dir>/scripts/eslint-defaults.sh --config <skill-dir>/defaults/eslint.config.js src/index.ts
+```
+
+Workflows that consume `COGNITIVE_COMMAND` from `detect-linter.sh` already do
+this; users wiring the wrapper into custom scripts should be aware.

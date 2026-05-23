@@ -197,17 +197,35 @@ def _section_dead_code(root: Path, language: str) -> Dict[str, Any]:
 
 
 def _section_complex_functions(root: Path, language: str) -> Dict[str, Any]:
-    outcome = complexity.run_complexity_check(root, language)
+    # Workflow I uses both metrics: cyclomatic for path-count, cognitive for
+    # human-reading effort. Cognitive drives severity when present.
+    outcome = complexity.run_complexity_check(root, language, metric="both")
     if outcome["status"] in ("skipped", "error"):
         return {"status": outcome["status"], "reason": outcome.get("reason", "")}
     findings = outcome.get("findings", [])
+    section_severity: Optional[str] = None
     for f in findings:
-        f["severity"] = SEV_MAJ
-    return {
+        raw = complexity.severity_for(f)
+        if raw == "CRITICAL":
+            f["severity"] = SEV_CRT
+            section_severity = SEV_CRT
+        elif raw == "MAJOR":
+            f["severity"] = SEV_MAJ
+            if section_severity != SEV_CRT:
+                section_severity = SEV_MAJ
+        else:
+            f["severity"] = SEV_MAJ
+            if section_severity is None:
+                section_severity = SEV_MAJ
+    result: Dict[str, Any] = {
         "status": outcome["status"],
-        "severity": SEV_MAJ if findings else None,
+        "severity": section_severity,
         "findings": findings,
     }
+    warnings = outcome.get("warnings") or []
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 
 def _enumerate_source_files(root: Path, language: str, exclude_tests: bool) -> List[Path]:
