@@ -6,9 +6,8 @@
 # `npm ci --prefix DIR` (or `npm install --prefix DIR` if no lockfile) once,
 # then exec ESLint from DIR/node_modules/.bin.
 #
-# Used by Workflow E (cognitive complexity) and Workflow I (complex_functions)
-# for JS/TS targets. NOT used for general A/C/D lint — Biome stays as the
-# JS/TS fallback there.
+# Used by Lint and Architecture Review complexity checks for JS/TS targets.
+# NOT used as the general JS/TS fallback; Biome stays the fallback there.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +16,7 @@ ESLINT_BIN="$DEFAULTS_DIR/node_modules/.bin/eslint"
 
 if [ ! -x "$ESLINT_BIN" ]; then
   if ! command -v npm >/dev/null 2>&1; then
-    echo "error: npm is required for Workflow E/I on JS/TS but is not installed." >&2
+    echo "error: npm is required for JS/TS complexity checks but is not installed." >&2
     echo "Install Node.js (which includes npm), then re-run." >&2
     exit 127
   fi

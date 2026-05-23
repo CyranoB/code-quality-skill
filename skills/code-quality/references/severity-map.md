@@ -112,7 +112,7 @@ tsc output lines contain `error TSxxxx` or (rarely) `warning TSxxxx`. Type error
 
 Cognitive complexity (Sonar-style; sources: `sonarjs/cognitive-complexity` for
 JS/TS, `flake8-cognitive-complexity` CCR001 for Python) drives the severity for
-Workflow E findings when measured. The threshold is 15 (matching SonarQube's
+complexity findings when measured. The threshold is 15 (matching SonarQube's
 "Sonar way" default); above that, severity scales with the measured value:
 
 | Measured cognitive | Normalized | Rationale |
@@ -130,7 +130,7 @@ The raw severity field set by the linter (e.g., ESLint `"warn"` → 1) is
 **ignored** for these rules — what matters is the measured value, not the
 configured severity level.
 
-## Semgrep (Workflow J)
+## Semgrep (Security Scan)
 
 | Native Severity | Normalized | Rationale |
 |-----------------|------------|-----------|
@@ -143,7 +143,7 @@ field is preserved verbatim in the finding (joined to a comma-separated string
 if the source provides a list) so users can cross-reference with their threat
 model.
 
-## Secret Scanning (Workflow J)
+## Secret Scanning (Security Scan)
 
 | Finding | Normalized | Rationale |
 |---------|------------|-----------|

@@ -16,9 +16,9 @@ nesting and control-flow disruptions:
 
 This is why a function with deeply nested `if`s often has *higher* cognitive
 than cyclomatic, while a flat `switch` has the inverse. The two metrics tell
-different stories; Workflow E and Workflow I report both.
+different stories; Lint and Architecture Review report both.
 
-## Severity thresholds (Workflow E / I)
+## Severity thresholds
 
 | Measured cognitive | Severity | Action |
 |--------------------|----------|--------|

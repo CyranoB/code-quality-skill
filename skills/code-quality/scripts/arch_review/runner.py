@@ -197,7 +197,7 @@ def _section_dead_code(root: Path, language: str) -> Dict[str, Any]:
 
 
 def _section_complex_functions(root: Path, language: str) -> Dict[str, Any]:
-    # Workflow I uses both metrics: cyclomatic for path-count, cognitive for
+    # Architecture Review uses both metrics: cyclomatic for path-count, cognitive for
     # human-reading effort. Cognitive drives severity when present.
     outcome = complexity.run_complexity_check(root, language, metric="both")
     if outcome["status"] in ("skipped", "error"):

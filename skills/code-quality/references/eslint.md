@@ -155,9 +155,9 @@ rules: { "complexity": ["error", 15] }  // error at 15
 
 ## Running with skill defaults & bundled plugins
 
-Workflows that need rules from `eslint-plugin-sonarjs` (Workflow E for
-cognitive complexity, Workflow I for `complex_functions`) invoke ESLint via
-the bundled wrapper, **not** plain `npx eslint`:
+Workflows that need rules from `eslint-plugin-sonarjs` (Lint complexity checks
+and Architecture Review `complex_functions`) invoke ESLint via the bundled
+wrapper, **not** plain `npx eslint`:
 
 ```bash
 bash <skill-dir>/scripts/eslint-defaults.sh \
@@ -185,18 +185,17 @@ explicit `npm ci --prefix DIR` first. The wrapper at
 First-run cost: ~10–20s and ~30MB into `defaults/node_modules` (gitignored).
 Subsequent calls are instant.
 
-### Scope: only for Workflow E / I
+### Scope: complexity checks only
 
-The bundled ESLint is **not** the JS/TS fallback for Workflows A/C/D — those
-keep using Biome (faster, native TS, no parser plugins needed). Bundling
-ESLint+sonarjs for general lint would slow every Workflow A invocation. The
-narrower scope means cognitive complexity and the curated sonarjs code-smell
-rules surface only when the user explicitly asks for complexity analysis or
-architecture review.
+The bundled ESLint is **not** the general JS/TS fallback. Lint's regular
+JS/TS pass keeps using the project linter or Biome fallback (faster, native TS,
+no parser plugins needed). The bundled wrapper is used for explicit complexity
+passes so cognitive complexity and curated sonarjs code-smell rules can run
+without requiring the target project to install sonarjs.
 
 If the user wants sonarjs rules during normal linting, they should install
 `eslint-plugin-sonarjs` in their own project's `package.json` — the project's
-ESLint config will pick it up via Workflow A/C/D's normal detection path.
+ESLint config will pick it up via Lint's normal detection path.
 
 ### Flat-config `cwd` requirement
 

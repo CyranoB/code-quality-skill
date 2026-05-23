@@ -4,7 +4,7 @@ Manual smoke tests to run before shipping. Unit tests cover correctness on synth
 
 ## 1. Self-dogfood
 
-The skill itself is a Python project. Run Workflow I on it.
+The skill itself is a Python project. Run Architecture Review on it.
 
 ```bash
 bash skills/code-quality/scripts/arch-review.sh \
@@ -73,6 +73,9 @@ Expected: cycles `found` (a↔b), layering `found` (domain → infrastructure).
 
 Pick any local repo with ~300-1000 source files. Run with all sections including dead_code and complex_functions. Verify total elapsed time under 30 seconds (excluding cold-start npx download of knip).
 
-## 7. Backward-compat check on Workflow F
+## 7. Backward-compat check on focused cycles
 
-After implementing Workflow I, run Workflow F against `fixtures/violations-py` and `fixtures/violations-js` exactly as before. Behavior must be unchanged. Workflow I MUST NOT regress Workflow F.
+After implementing Architecture Review, run focused cycle checks against
+`fixtures/violations-py` and `fixtures/violations-js` exactly as before.
+Behavior must be unchanged. Full Architecture Review must not regress focused
+cycle detection.

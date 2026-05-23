@@ -1,480 +1,554 @@
 ---
 name: code-quality
 description: >-
-  Run code quality analysis using project-native tools (ESLint, Biome, ruff,
-  pyright, tsc, madge, pydeps, Semgrep, detect-secrets): linting, auto-fix,
-  type checking, complexity, dependency, architecture, and security analysis.
-  Use when the user asks to review code, lint a file, check code quality, fix
-  linting errors, audit a project, run static analysis, find bugs, scan for
-  vulnerabilities, or do pre-commit checks. Also triggers on ESLint, Biome,
-  ruff, pyright, tsc; unused variables, style violations; cyclomatic or
-  cognitive complexity, complex functions, hard to test; circular
-  dependencies, dependency graph, find cycles, orphan modules; set up
-  linting; type check, type errors, type safety; architecture review, hub
-  modules, god modules, layering violations, coupling, onboard me to this
-  codebase; security scan, SAST, OWASP, CWE, find vulnerabilities, secret
-  scan, leaked credentials, find API keys.
+  Use when the user asks to review code, lint files, fix linting errors, audit a
+  project, run static analysis, check types, inspect complexity, find circular
+  dependencies, review architecture, scan for vulnerabilities or secrets, run
+  pre-commit checks, or set up ESLint, Biome, ruff, pyright, tsc, madge,
+  depcycle, Semgrep, or detect-secrets.
 ---
 
 # Code Quality Skill
 
-Analyze, verify, and fix code quality issues using the project's own tools. This skill detects the project's linter and type checker, runs them with structured output, normalizes the results into a consistent severity format, and presents actionable findings.
+Analyze, verify, and fix code quality issues using the project's own tools. This
+skill detects the project's linter and type checker, runs them with structured
+output, normalizes findings into a consistent severity format, and presents
+actionable results.
 
-**Core principle**: Use what the project already has. No external services, no server setup, no token overhead when not in use.
+**Core principle**: Use what the project already has. No external services, no
+server setup, no token overhead when not in use.
+
+**Named workflows**:
+
+1. **Lint** - review, check, lint, fix, or audit code quality
+2. **Pre-commit Check** - changed-file lint and type check before commit
+3. **Type Check** - pyright or tsc static type analysis
+4. **Architecture Review** - full audit plus focused complexity/cycle checks
+5. **Security Scan** - Semgrep SAST plus detect-secrets
+6. **Linter Setup** - configure a project-level linter
 
 **Supported tools**:
 - **JavaScript/TypeScript linting**: ESLint, Biome
-- **Python linting**: ruff
-- **Python type checking**: pyright
-- **TypeScript type checking**: tsc
+- **Python linting**: ruff, pylint
+- **Type checking**: pyright, tsc
+- **Architecture**: madge, depcycle, knip, vulture, custom graph analysis
+- **Security**: Semgrep, detect-secrets
 
-## Step 1: Detect the Project's Linter
+## Step 1: Detect Project Tools
 
-Before any analysis, determine the skill directory (the directory containing this SKILL.md file) and run detection.
+Before any analysis, determine the skill directory (the directory containing
+this `SKILL.md`) and run detection.
 
 ```bash
 bash <skill-dir>/scripts/detect-linter.sh [target-path]
 ```
 
-Replace `<skill-dir>` with the absolute path to the directory containing this SKILL.md. For example, if this file is at `/Users/alice/.claude/skills/code-quality/SKILL.md`, the command is `bash /Users/alice/.claude/skills/code-quality/scripts/detect-linter.sh [target-path]`.
+Replace `<skill-dir>` with the absolute path to the directory containing this
+file. For example, if this file is at
+`/Users/alice/.claude/skills/code-quality/SKILL.md`, run:
 
-This outputs key=value pairs. Parse these values:
+```bash
+bash /Users/alice/.claude/skills/code-quality/scripts/detect-linter.sh [target-path]
+```
+
+Detection outputs key=value pairs:
 
 | Key | Use |
 |-----|-----|
-| `TOOL` | Which linter (eslint, biome, ruff, npm-script, none) |
-| `COMMAND` | Full command to run analysis with JSON output |
-| `FIX_COMMAND` | Full command to auto-fix issues |
-| `CONFIG` | Path to config file (empty = no explicit config) |
-| `LANGUAGE` | javascript or python |
-| `FALLBACK` | "true" if no explicit config was found |
+| `TOOL` | Linter: eslint, biome, ruff, pylint, npm-script, none |
+| `COMMAND` | Analysis command with JSON output when available |
+| `FIX_COMMAND` | Native auto-fix command, empty if unsupported |
+| `CONFIG` | Config file path, empty when none was detected |
+| `LANGUAGE` | javascript, python, or unknown |
+| `TYPESCRIPT` | true when `tsconfig.json` exists |
+| `FALLBACK` | true when built-in defaults are used |
 | `PROJECT_ROOT` | Detected project root |
-| `FILES` | File list (only with --changed-only) |
+| `FRAMEWORK` | Framework hint for architecture analysis |
+| `FILES` | Changed lintable files, only with `--changed-only` |
+| `TYPE_CHECKER` | pyright, tsc, or none |
+| `TYPE_CHECK_COMMAND` | Type-check command |
+| `COGNITIVE_COMMAND` | Cognitive complexity command for the language |
+| `ESLINT_DEFAULTS_CMD` | Bundled ESLint+sonarjs wrapper |
+| `SEMGREP_AVAILABLE` | true when Semgrep can run through `uvx` |
+| `SECRETS_TOOL` | detect-secrets, gitleaks, or none |
 
-**If TOOL=none and LANGUAGE=unknown**: No supported language detected. Tell the user the skill doesn't support this project type yet.
+If `TOOL=none` and `LANGUAGE=unknown`, report that this project type is not
+supported yet.
 
-**If FALLBACK=true**: The skill's built-in default config is being used (see "Default Configs" below). This is normal and the analysis will work out of the box. Inform the user:
-> "No linter config found in your project. Running with the skill's built-in defaults (SonarQube-inspired rules). To customize, create your own config file."
+If `FALLBACK=true`, inform the user:
 
-**If TOOL=npm-script**: The project has a custom lint script but no recognized linter config for JSON output. Run the `COMMAND` (e.g., `npm run lint`) and parse the human-readable text output instead. Look for patterns like `file:line:col: message` or ESLint/Biome-style output. If the output is unstructured, present it verbatim and let the user interpret it.
+> No linter config found in your project. Running with the skill's built-in
+> defaults. To customize, create your own config file.
 
-**If TOOL=pylint**: Pylint has no auto-fix capability (`FIX_COMMAND` will be empty). Provide manual fix suggestions instead. Pylint's JSON output uses `message-id` (e.g., `C0114`) and `type` (`convention`, `refactor`, `warning`, `error`, `fatal`). Map these to the unified severity: `fatal` → BLOCKER, `error` → CRITICAL, `warning` → MAJOR, `refactor` → MINOR, `convention` → INFO.
+If `TOOL=npm-script`, run `COMMAND` directly and parse human-readable output
+best-effort. Look for `file:line:col: message` or ESLint/Biome-style output. If
+the output is unstructured, present it verbatim.
 
-After detection, load the matching reference file from `<skill-dir>/references/` for tool-specific guidance:
-- `TOOL=eslint` → read `<skill-dir>/references/eslint.md`
-- `TOOL=biome` → read `<skill-dir>/references/biome.md`
-- `TOOL=ruff` → read `<skill-dir>/references/ruff.md`
+If `TOOL=pylint`, there is no auto-fix. Map pylint JSON severities as:
+`fatal` -> BLOCKER, `error` -> CRITICAL, `warning` -> MAJOR, `refactor` ->
+MINOR, `convention` -> INFO.
 
-Only load `<skill-dir>/references/severity-map.md` when the linter reports issues (not on clean results — saves tokens).
+Load reference files only as needed:
+- `TOOL=eslint` -> `<skill-dir>/references/eslint.md`
+- `TOOL=biome` -> `<skill-dir>/references/biome.md`
+- `TOOL=ruff` -> `<skill-dir>/references/ruff.md`
+- Load `<skill-dir>/references/severity-map.md` only when findings exist.
 
 ## Default Configs
 
-The skill ships with built-in configs in `<skill-dir>/defaults/` so analysis works out of the box — no project setup required. Inspired by SonarQube's "Sonar way" quality profile.
+The skill ships with built-in configs in `<skill-dir>/defaults/` so analysis can
+run without project setup. Inspired by SonarQube's "Sonar way" quality profile.
 
-When no project-level config is found (`FALLBACK=true`), the detect script automatically uses sensible defaults. The developer doesn't need to configure anything.
+### Python - `defaults/ruff.toml`
 
-### Python — `defaults/ruff.toml`
+Rules enabled: `E`, `F`, `W`, `C90`, `I`, `N`, `UP`, `B`, `S`, `SIM`, `T20`.
+Cyclomatic complexity threshold: 10. Fallback lint runs through `uvx ruff` with
+`--config <skill-dir>/defaults/ruff.toml`.
 
-Rules enabled: `E` (pycodestyle errors), `F` (pyflakes), `W` (pycodestyle warnings), `C90` (cyclomatic complexity), `I` (import sorting), `N` (naming), `UP` (pyupgrade), `B` (bugbear), `S` (security/bandit), `SIM` (simplify), `T20` (print statements). Complexity threshold: 10. Runs via `uvx ruff` — zero install needed. Config passed via `--config` flag.
+### JavaScript/TypeScript - Biome fallback for general lint
 
-### JavaScript/TypeScript — Biome (zero-config) for general lint
+When no JS/TS linter is configured, the skill uses Biome as the fallback for
+general lint because Biome parses both JavaScript and TypeScript without parser
+plugins. It runs through `npx --yes @biomejs/biome check --reporter=json`.
 
-When no linter is configured, the skill uses **Biome** as the fallback for Workflows A/C/D. Biome handles both JavaScript and TypeScript natively — no parser plugins needed. It runs via `npx @biomejs/biome` with built-in rules covering: correctness (unused variables, unreachable code), suspicious patterns (`noExplicitAny`, `noDoubleEquals`), complexity, and formatting.
+### JavaScript/TypeScript - Bundled ESLint + sonarjs for complexity
 
-**Why Biome over ESLint for general lint**: ESLint cannot parse TypeScript without `@typescript-eslint/parser`, which is rarely installed in unconfigured projects. Biome works out of the box for both JS and TS.
+General JS/TS lint uses the project linter or Biome fallback. Cognitive
+complexity uses the bundled ESLint wrapper because it needs
+`eslint-plugin-sonarjs`:
 
-### JavaScript/TypeScript — Bundled ESLint + sonarjs (Workflow E / I only)
+```bash
+bash <skill-dir>/scripts/eslint-defaults.sh
+```
 
-For cognitive complexity (Workflow E) and Workflow I's `complex_functions` section on JS/TS, the skill ships a bundled ESLint with `eslint-plugin-sonarjs` in `defaults/package.json`. It's invoked via `scripts/eslint-defaults.sh`, which lazily runs `npm ci --prefix defaults/` on first use (~10–20s, ~30MB into `defaults/node_modules`, gitignored) and then execs `defaults/node_modules/.bin/eslint`.
+The wrapper lazily runs `npm ci --prefix defaults/` on first use, then execs
+`defaults/node_modules/.bin/eslint`. First run costs about 10-20s and writes
+`defaults/node_modules` (gitignored).
 
-This bundled ESLint is **not** used as the A/C/D fallback — Biome remains there for speed and TS parsing without plugins. Workflow E and Workflow I are the only entry points that consume the sonarjs rules. Users wanting sonarjs during general lint should install `eslint-plugin-sonarjs` in their project's own `package.json` so Workflow A/C/D picks it up via the project's ESLint config.
+Lint and Architecture Review both use this wrapper for JS/TS complexity. It is
+not the JS/TS fallback linter; Biome remains the fallback for regular linting.
 
-**Security plugins are intentionally not bundled** — Workflow J's Semgrep covers JS/TS security with deeper rules; two security engines would create noise.
-
-The `defaults/eslint.config.js` file is also available standalone for projects that explicitly use ESLint but lack a config — it can be referenced manually.
+**Security plugins are intentionally not bundled**. Security Scan owns that
+surface through Semgrep and detect-secrets.
 
 ### When to suggest project-level config
 
-After presenting results with defaults, add: "These results use the skill's built-in rules. To customize (adjust severity, disable rules, add plugins), create your own config:" and suggest:
+After reporting results that used built-in defaults, add:
+
+> These results use the skill's built-in rules. To customize severity, disable
+> rules, or add plugins, create your own config.
+
+Suggest:
 - **ruff**: `ruff.toml` or `[tool.ruff]` in `pyproject.toml`
 - **ESLint**: `npm init @eslint/config@latest`
+- **Biome**: `npx @biomejs/biome init`
 
-## Workflow A: Review File or Code
+## Workflow: Lint
 
-**Triggers**: "review", "check", "what's wrong with", "lint", "analyze", "any issues in"
+**Triggers**: "review", "check", "what's wrong with", "lint", "analyze",
+"any issues in", "fix", "clean up", "auto-fix", "fix linting", "audit",
+"project scan", "full analysis", "scan the whole project", "overall code
+quality".
 
-### Steps
+Use this workflow for file, directory, and project-level code quality checks.
+Plain audit/project scan requests route here, not to Architecture Review.
 
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]`
-2. **Scope**: Determine target files from user request (specific file, directory, or project)
-3. **Run linter**: Execute the `COMMAND` with target files appended
+### Scope and mode
+
+- **Scope**: file(s), directory, or project root from the user request.
+- **Mode**: `analyze` by default.
+- **Fix mode**: use when the request says fix, clean up, auto-fix, or fix lint
+  errors.
+- **Project audit mode**: use when the target is the project root or the request
+  says audit/project scan/full analysis.
+
+### Analyze steps
+
+1. Run detection:
    ```bash
-   # Example for eslint:
+   bash <skill-dir>/scripts/detect-linter.sh [project-path]
+   ```
+2. Determine the target files/directories from the user request.
+3. Run the detected linter command with the target appended:
+   ```bash
    npx eslint --format json src/index.ts
-   # Example for ruff:
+   npx @biomejs/biome check --reporter=json src/
    ruff check --output-format json src/main.py
    ```
-4. **Handle exit codes**: Exit code 1 means issues were found (expected). Exit code 2 means a config or runtime error — report this to the user.
-5. **Parse JSON output**: Extract file path, line, column, rule, message, severity from each finding.
-6. **Normalize severity**: Map tool-native severity to the unified scale using `references/severity-map.md`.
-   - Cyclomatic complexity violations (ESLint `complexity` rule, ruff `C901`) always map to **[MAJ] MAJOR** regardless of raw tool severity. High complexity predicts bugs and poor testability. Include the measured complexity vs. the configured threshold in the message (e.g., "complexity 15 > max 10"). C901 has no auto-fix — suggest manual refactoring (extract sub-functions, simplify conditionals, use early returns).
-7. **Present findings**: Use the output format below. For MAJOR and above, include a brief explanation of why it matters and suggest a fix.
+4. Treat exit code 1 as findings found. Treat exit code 2+ as config/runtime
+   failure and report it.
+5. Parse findings into file, line, column, rule, message, severity, and
+   fixability.
+6. Run explicit complexity checks on the same target. Do not assume the project
+   Ruff or ESLint config enables complexity.
+7. Merge lint and complexity findings into one Code Quality Report.
 
-If no issues are found, report a clean result.
+### Complexity included by default
 
-## Workflow B: Fix Issues
+Lint includes both cyclomatic and cognitive complexity for review/check/lint and
+audit requests. Complexity findings are manual-only; do not mark them
+auto-fixable and do not offer `--fix` for them.
 
-**Triggers**: "fix", "clean up", "auto-fix", "fix linting", "fix lint errors"
+**Python**:
 
-### Steps
+```bash
+uvx ruff check --select C901 --output-format json [targets...]
+uvx --with flake8-cognitive-complexity flake8 \
+  --select=CCR001 --max-cognitive-complexity=15 [targets...]
+```
 
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]`
-2. **Analyze first**: Run the `COMMAND` to get a baseline of current issues
-3. **Count baseline issues**: Note total count and severity breakdown
-4. **Run fix command**: Execute the `FIX_COMMAND` with target files
-   ```bash
-   # Example for eslint:
-   npx eslint --fix src/index.ts
-   # Example for ruff:
-   ruff check --fix src/main.py
-   ```
-5. **Re-analyze**: Run the `COMMAND` again to verify what was fixed and what remains
-6. **Report results**: Show what was fixed (count, types) and what remains. For remaining issues without auto-fix, provide specific code changes the user can apply.
+If `uvx` is unavailable but `ruff` is installed, use `ruff check --select C901
+--output-format json` for the cyclomatic half and warn that cognitive complexity
+could not run.
 
-**Important**: Always explain what was fixed in plain language. Don't just say "5 issues fixed" — say "Replaced 3 `==` with `===`, removed 2 unused imports."
+**JavaScript/TypeScript** (run with `cwd` set to `PROJECT_ROOT`):
 
-If the `FIX_COMMAND` is empty (e.g., pylint), inform the user and provide manual fix suggestions instead.
+```bash
+bash <skill-dir>/scripts/eslint-defaults.sh \
+  --no-config-lookup \
+  --config <skill-dir>/defaults/eslint.config.js \
+  --rule '{"complexity":["warn",10],"sonarjs/cognitive-complexity":["warn",15]}' \
+  --format json [targets...]
+```
 
-## Workflow C: Project Audit
-
-**Triggers**: "audit", "project scan", "full analysis", "scan the whole project", "overall code quality"
-
-### Steps
-
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]`
-2. **Scope files**: Run the linter on the project root. The tool will respect `.gitignore` and skip `node_modules/`, `dist/`, `build/`, `venv/`, `__pycache__/` etc.
-3. **Run linter**: Execute `COMMAND` on the project root directory
-   ```bash
-   # Example: run on whole project
-   npx eslint --format json .
-   ruff check --output-format json .
-   ```
-4. **Parse and normalize**: Process all findings
-5. **Cap output**: If more than 50 issues, show the top 50 sorted by severity (BLOCKER first). State the total count and offer to drill into specific files.
-6. **Present audit report**: Use the output format below with a summary header showing:
-   - Total issues by severity
-   - Most problematic files (top 5 by issue count)
-   - Quick wins (issues that are auto-fixable)
-
-Offer follow-up actions: "I can fix the N auto-fixable issues, drill into a specific file, or check for circular dependencies."
-
-## Workflow D: Pre-commit Check
-
-**Triggers**: "check before commit", "pre-commit", "check my changes", "ready to commit?", "lint changed files"
-
-### Steps
-
-1. **Get changed files**: Run detection with the `--changed-only` flag
-   ```bash
-   bash <skill-dir>/scripts/detect-linter.sh [project-path] --changed-only
-   ```
-2. **Check FILES output**: If `FILES` is empty, report "No lintable files in current changes."
-3. **Run linter on changed files only**:
-   ```bash
-   # Example for eslint:
-   npx eslint --format json file1.ts file2.ts
-   # Example for ruff:
-   ruff check --output-format json file1.py file2.py
-   ```
-4. **Run type checker on changed files** (if `TYPE_CHECKER` is not `none`):
-   - **pyright**: `npx pyright --outputjson file1.py file2.py`
-   - **tsc**: `npx tsc --noEmit` (full project, then filter diagnostics to changed files)
-5. **Present pass/fail verdict**:
-   - **PASS**: "All changed files pass lint and type checks. Ready to commit."
-   - **FAIL**: Show issues in changed files only, with severity and suggested fixes. Include both lint and type errors.
-
-## Workflow E: Complexity Analysis (Cognitive + Cyclomatic)
-
-**Triggers**: "check complexity", "find complex functions", "cyclomatic complexity", "cognitive complexity", "complexity analysis", "too complex", "hard to test", "hard to read", "refactor candidates"
-
-This workflow runs **with built-in defaults** — no project configuration required. It reports **both** cyclomatic and cognitive complexity in a single table. Cognitive is the headline metric because it tracks human reading effort (the strongest predictor of defect density and maintenance pain); cyclomatic stays as a secondary column because path-count still matters for test coverage planning.
-
-### Default Thresholds
+Thresholds:
 
 | Metric | Max | Severity if exceeded |
 |--------|-----|----------------------|
-| **Cognitive complexity** | **15** (Sonar default) | 16–25 → `[MAJ] MAJOR`, ≥ 26 → `[CRT] CRITICAL` |
-| Cyclomatic complexity | 10 | Any value over the cap → `[MAJ] MAJOR` |
+| Cognitive complexity | 15 | 16-25 -> `[MAJ]`, >= 26 -> `[CRT]` |
+| Cyclomatic complexity | 10 | Any value over cap -> `[MAJ]` |
 
-When both metrics exceed their cap for the same function, **cognitive drives the severity tag**. See `references/severity-map.md` and `references/cognitive-complexity.md`.
+When both metrics exceed their cap for the same function, cognitive drives the
+severity tag. Merge by `(file, line +/-2)`. Function names come from the
+cyclomatic finding when available.
 
-### Sources per language
+Load `<skill-dir>/references/cognitive-complexity.md` when complexity findings
+exist so refactoring suggestions are concrete.
 
-| Language | Cyclomatic | Cognitive | Install |
-|----------|------------|-----------|---------|
-| Python | `ruff C901` (uvx) | `flake8-cognitive-complexity` CCR001 via `uvx --with` | both zero-install |
-| JS/TS | ESLint core `complexity` | `eslint-plugin-sonarjs` `cognitive-complexity` via bundled wrapper | bundled in `defaults/package.json`, lazy `npm ci` on first use |
+### Fix mode
+
+1. Run the full lint analysis first, including complexity, to capture a baseline.
+2. Count baseline issues by severity and auto-fixability.
+3. If `FIX_COMMAND` is empty, explain that the detected tool has no auto-fix and
+   provide manual suggestions.
+4. Run the native fix command on the target:
+   ```bash
+   npx eslint --fix src/index.ts
+   npx @biomejs/biome check --write src/
+   ruff check --fix src/main.py
+   ```
+5. Re-run the linter and complexity checks.
+6. Report the delta:
+   - what the tool fixed in plain language
+   - what remains
+   - which remaining findings are manual-only complexity refactors
+
+Do not say only "N issues fixed". Name the types of changes when the tool output
+makes them knowable, for example "removed unused imports" or "replaced `var`
+with `const`".
+
+### Project audit mode
+
+Run the linter and explicit complexity checks on the project root. Respect the
+tool's normal ignore behavior for `node_modules/`, `dist/`, `build/`, `venv/`,
+`__pycache__/`, and similar paths.
+
+If more than 50 findings exist, show the top 50 sorted by severity and state the
+total. Include:
+- total issues by severity
+- top 5 problematic files by issue count
+- auto-fixable count
+- manual-only complexity count
+
+Offer concrete follow-ups: fix auto-fixable issues, drill into a file, run
+focused complexity, or run Architecture Review for structure/coupling.
+
+## Workflow: Pre-commit Check
+
+**Triggers**: "check before commit", "pre-commit", "check my changes", "ready to
+commit?", "lint changed files".
+
+This workflow is intentionally fast. It runs changed-file lint and type checks.
+It does not run cognitive complexity unless the user explicitly asks for
+complexity.
 
 ### Steps
 
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE` and `COGNITIVE_COMMAND`. The detect script already constructs the per-language cognitive command — use it.
-2. **Run cyclomatic + cognitive**. Easiest path: invoke `arch_review/complexity.py`'s `run_complexity_check(root, language, metric="both")` programmatically, or run the two commands separately and merge by `(file, line ±2)`:
+1. Run detection with changed files:
+   ```bash
+   bash <skill-dir>/scripts/detect-linter.sh [project-path] --changed-only
+   ```
+2. If `FILES` is empty, report "No lintable files in current changes."
+3. Run the detected linter on changed files:
+   ```bash
+   npx eslint --format json file1.ts file2.ts
+   npx @biomejs/biome check --reporter=json file1.ts file2.ts
+   ruff check --output-format json file1.py file2.py
+   ```
+4. If `TYPE_CHECKER` is not `none`, run type checking:
+   - **pyright**: `npx pyright --outputjson file1.py file2.py`
+   - **tsc**: `npx tsc --noEmit`, then filter diagnostics to changed files
+5. Present a pass/fail verdict:
+   - **PASS**: "All changed files pass lint and type checks. Ready to commit."
+   - **FAIL**: show changed-file issues with severity and suggested fixes.
+
+If the user asks for pre-commit plus complexity, run Lint on the changed files
+after the fast pre-commit checks and label complexity findings as manual-only.
+
+## Workflow: Type Check
+
+**Triggers**: "type check", "verify types", "run pyright", "run tsc", "type
+errors", "check types", "verify code", "static type analysis".
+
+Type checkers catch correctness issues that linters miss, such as missing
+attributes, invalid function signatures, and unsafe `None`/`undefined` usage.
+
+**Supported tools**:
+- **Python**: pyright through `npx pyright`
+- **TypeScript**: `tsc --noEmit`
+
+### Steps
+
+1. Run detection and read `LANGUAGE`, `PROJECT_ROOT`, `TYPE_CHECKER`, and
+   `TYPE_CHECK_COMMAND`.
+2. If `TYPE_CHECKER=none`, say type checking is available for Python and
+   TypeScript projects. For plain JavaScript, suggest adding a `tsconfig.json`
+   with `npx tsc --init` if they want type checking.
+3. Load `<skill-dir>/references/pyright.md` when `TYPE_CHECKER=pyright`.
+4. Run the type checker:
+   ```bash
+   npx pyright --outputjson [files-or-directory]
+   npx tsc --noEmit
+   ```
+5. Treat exit code 1 as type errors found, not command failure.
+6. Parse results:
+   - Pyright JSON: `generalDiagnostics`; line numbers are 0-based, add 1 when
+     displaying.
+   - tsc text: `file(line,col): error TSxxxx: message`.
+7. Normalize severity:
+   - pyright `error` -> `[CRT]`
+   - pyright `warning` -> `[MAJ]`
+   - pyright `information` -> `[MIN]`
+   - tsc errors -> `[CRT]`
+   - tsc warnings -> `[MAJ]`
+8. Present findings with concrete fixes.
+
+Filtering:
+- Group noisy `reportMissingTypeStubs` warnings into one summary line.
+- If more than 50 diagnostics exist, show the top 50 by severity and state the
+  total.
+
+## Workflow: Architecture Review
+
+**Triggers**: "architecture review", "review architecture", "arch audit", "find
+god modules", "find hub modules", "layering violations", "coupling metrics",
+"instability", "module coupling", "show me the structure", "onboard me to this
+codebase", "check complexity", "find complex functions", "cyclomatic
+complexity", "cognitive complexity", "circular dependencies", "circular
+imports", "dependency graph", "find cycles", "orphan modules".
+
+Architecture Review has three modes:
+
+| Request | Mode |
+|---------|------|
+| complexity only | focused complexity |
+| cycles/dependencies only | focused cycles |
+| architecture/audit/onboarding/coupling/layers | full audit |
+
+### Full audit mode
+
+Produces a structured report with cycles, layering violations, hub/god modules,
+instability hotspots, deep import chains, oversized files, excessive exports,
+dead code, and complex functions. It is for on-demand audits and onboarding, not
+a pre-commit gate.
+
+1. Run detection and read `LANGUAGE`, `PROJECT_ROOT`, and `FRAMEWORK`.
+2. Run the orchestrator:
+   ```bash
+   bash <skill-dir>/scripts/arch-review.sh \
+     --project-root "$PROJECT_ROOT" \
+     --language "$LANGUAGE" \
+     --framework "$FRAMEWORK"
+   ```
+3. Useful flags:
+   - `--top N`
+   - `--include-tests`
+   - `--skip-section <name>` (repeatable)
+   - `--max-file-loc`, `--max-exports`, `--max-ca`, `--max-ce`,
+     `--max-chain-depth`
+4. Load `<skill-dir>/references/architecture.md`.
+5. Render the JSON report using the normal severity-table style.
+
+If `LANGUAGE=unknown`, report that Architecture Review supports Python and
+JS/TS projects. If `python3` is missing, report that the orchestrator requires
+`python3`.
+
+Findings are not necessarily errors. Always render clean, found, skipped, and
+error sections clearly.
+
+### Focused complexity mode
+
+Use this mode for "check complexity", "find complex functions", "hard to test",
+or "refactor candidates". It runs the same dual-metric complexity checks as
+Lint, but reports a dedicated complexity table and refactoring guidance.
+
+1. Run detection to get `LANGUAGE`, `PROJECT_ROOT`, and `COGNITIVE_COMMAND`.
+2. Prefer the helper used by the architecture orchestrator:
+   `arch_review.complexity.run_complexity_check(root, language, metric="both")`.
+   If driving commands directly, use:
 
    **Python**:
    ```bash
-   uvx ruff check --select C901 --output-format json [files...]
+   uvx ruff check --select C901 --output-format json [targets...]
    uvx --with flake8-cognitive-complexity flake8 \
-     --select=CCR001 --max-cognitive-complexity=15 [files...]
+     --select=CCR001 --max-cognitive-complexity=15 [targets...]
    ```
 
-   **JS/TS** (must run with `cwd` set to the project root):
+   **JS/TS** (run from `PROJECT_ROOT`):
    ```bash
    bash <skill-dir>/scripts/eslint-defaults.sh \
      --no-config-lookup \
      --config <skill-dir>/defaults/eslint.config.js \
      --rule '{"complexity":["warn",10],"sonarjs/cognitive-complexity":["warn",15]}' \
-     --format json [files...]
+     --format json [targets...]
    ```
+3. Merge by `(file, line +/-2)` and sort by cognitive complexity descending.
+4. Use severity rules:
+   - cognitive 16-25 -> `[MAJ]`
+   - cognitive >= 26 -> `[CRT]`
+   - cyclomatic-only over 10 -> `[MAJ]`
+5. Load `<skill-dir>/references/cognitive-complexity.md` and include manual
+   refactoring suggestions such as early returns, extract method, table
+   dispatch, or polymorphism.
 
-   The bundled ESLint wrapper installs `eslint-plugin-sonarjs` lazily on first run (~10–20s, ~30MB, gitignored). See `references/eslint.md`.
+Complexity violations have no auto-fix. If cognitive tooling is unavailable,
+fall back to cyclomatic-only and warn in the report.
 
-3. **Merge findings**: Pair cyclomatic + cognitive findings by `(file, line ±2)`. The function name comes from the cyclomatic finding (ruff and ESLint expose it in the rule message); sonarjs and flake8 cognitive messages do not include it. Cognitive-only findings (no nearby cyclomatic) still appear with `function: ""`.
-4. **Normalize severity**: For each merged finding, drive severity from cognitive when present:
-   - cognitive ≤ 15: filtered out by the tools (won't appear)
-   - cognitive 16–25 → `[MAJ] MAJOR`
-   - cognitive ≥ 26 → `[CRT] CRITICAL`
-   - cognitive missing, cyclomatic only → `[MAJ] MAJOR`
-5. **Present findings**: Use the output format below. Sort by cognitive (descending). For each violation, include both metric values when available, and an actionable refactoring suggestion drawn from `references/cognitive-complexity.md` (early returns, extract method, table dispatch, polymorphism).
+### Focused cycles mode
 
-### Example Output
+Use this mode for circular dependencies, circular imports, dependency graph, find
+cycles, or orphan modules.
 
-```
-## Complexity Analysis Report
-
-**Language**: python | **Cognitive threshold**: 15 | **Cyclomatic threshold**: 10 | **Files scanned**: 12
-
-| File | Line | Function | Cyclomatic | Cognitive | Severity |
-|------|------|----------|-----------:|----------:|----------|
-| src/orders.py | 23 | process_order | 18 | 34 | [CRT] |
-| src/auth.py   | 45 | validate_token | 12 | 22 | [MAJ] |
-| src/utils.py  | 80 |                |  – | 19 | [MAJ] |
-
-**src/orders.py:23** (`process_order`, cyclomatic 18, cognitive 34):
-Both metrics well above threshold; cognitive 34 means deeply nested or
-sequence-breaking logic. Extract the discount and inventory branches into
-helper functions, and convert the validation chain to early returns —
-expected cognitive after refactor: ~12.
-
-**src/auth.py:45** (`validate_token`, cyclomatic 12, cognitive 22):
-Moderate cyclomatic, but cognitive 22 suggests the branches are nested.
-Flatten with guard clauses for invalid cases.
-
-**src/utils.py:80** (cognitive 19, function name not reported by tool):
-Cognitive-only finding — likely a nested conditional block at line 80 that
-no cyclomatic rule caught. Inspect manually.
-```
-
-### Clean Result
-
-```
-## Complexity Analysis Report
-
-**Language**: python | **Cognitive threshold**: 15 | **Cyclomatic threshold**: 10 | **Files scanned**: 12
-
-No functions exceed the complexity thresholds. Code is well-structured.
-```
-
-**Important**: Complexity violations have no auto-fix. Always provide manual refactoring suggestions. Do not offer to run `--fix`. When the cognitive sub-tool is unavailable (no `uvx` for Python, no `npm` for JS/TS), the workflow falls back to cyclomatic-only with a warning in the report.
-
-## Workflow F: Dependency Analysis
-
-**Triggers**: "circular dependencies", "circular imports", "dependency graph", "check imports", "module dependencies", "find cycles", "orphan modules"
-
-Analyzes module dependency structure to find circular dependencies and orphan modules.
-
-| Language | Tool | Zero-install |
-|----------|------|-------------|
-| JavaScript/TypeScript | madge (`npx madge`) | yes |
-| Python | depcycle (`uvx depcycle`) | yes |
-
-### Steps
-
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE`, `TYPESCRIPT`, `FRAMEWORK`, and `PROJECT_ROOT`. Note: `LANGUAGE=javascript` covers both JS and TS — check `TYPESCRIPT=true` (i.e. a `tsconfig.json` exists) to decide whether to pass `--ts-config` and `--extensions ts,tsx`.
-2. **Load reference** based on `LANGUAGE`:
-   - `javascript` → read `<skill-dir>/references/madge.md`
-   - `python` → read `<skill-dir>/references/pydeps.md`
-3. **Determine entry point**: Use the target path from the user's request. If none specified, pick what fits the project layout:
-   - **Single-entry TypeScript apps** (Node services, libraries): use a file entry point. Check `package.json` `main`/`module`, then look for `src/index.ts`, `src/server.ts`, `src/main.ts`, `src/app.ts`. A file entry resolves transitively and gives the cleanest graph.
-   - **Framework projects with no single entry** (Next.js, Remix, SvelteKit, Astro, etc.): there is no `src/index.ts` — the framework owns routing. Scan the source directory instead: `app/` for Next.js App Router, `pages/` for Next.js Pages Router, `src/` for Vite/CRA/SvelteKit. If `tsconfig.json` exists at the project root, this is still TypeScript — keep `--ts-config` and `--extensions ts,tsx`.
-   - **Multi-root projects**: if top-level dirs like `components/` or `lib/` aren't reached from the main entry, scan each separately so isolated cycles aren't missed.
-   - **JavaScript projects**: `src/` (or whatever the source directory is) works fine as a directory entry.
-
-   When unsure, run once and check the file count: `npx madge --json <entry> | jq 'length'`. If it returns 0 or far fewer files than you expect, the entry is wrong — try a directory or a different file.
-
-4. **Run circular dependency check**:
-
-   **JavaScript (madge)**:
+1. Run detection and read `LANGUAGE`, `TYPESCRIPT`, `FRAMEWORK`, and
+   `PROJECT_ROOT`.
+2. Load:
+   - JS/TS -> `<skill-dir>/references/madge.md`
+   - Python -> `<skill-dir>/references/pydeps.md`
+3. Determine entry point:
+   - Node services/libraries: package `main`/`module`, then `src/index.ts`,
+     `src/server.ts`, `src/main.ts`, or `src/app.ts`
+   - Framework projects: scan source directories such as `app/`, `pages/`, or
+     `src/`
+   - Multi-root projects: scan each source root separately when one entry misses
+     files
+4. Run cycles:
    ```bash
    npx madge --circular --json src/
-   ```
-
-   **TypeScript with single entry**:
-   ```bash
    npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx src/index.ts
-   ```
-
-   **TypeScript framework project (Next.js App Router shown)**:
-   ```bash
    npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx app/
-   ```
-
-   Parse JSON output: array of cycles, each cycle is an array of file paths. Empty `[]` = clean. Exit code 1 = cycles found (expected).
-
-   **If madge errors with `Missing script: "madge"` or warnings about unknown npm flags** (`Unknown cli config "--circular"`, etc.): the `npx` invocation is being intercepted — typically by a shell alias, a hook that rewrites `npx` to `npm`, or an RTK-style proxy. The error message comes from npm, not madge. Bypass by calling npx directly:
-   ```bash
-   command npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx app/
-   # or with the absolute path:
-   $(which npx) madge --circular --json --ts-config tsconfig.json --extensions ts,tsx app/
-   ```
-   `command npx` skips aliases and most pre-tool-use rewriters. Don't conclude that madge is missing or that the project is broken — verify by running `command npx madge --version` first.
-
-   **Python (depcycle)**:
-   ```bash
    uvx depcycle <package-path>
-   # e.g.: uvx depcycle src/mypackage
-   # e.g.: uvx depcycle .
    ```
-   Parse text output: look for `✓ No circular dependencies` (clean) or `->` chains showing cycles. Exit code 1 = cycles found (expected).
-
-5. **Optionally check orphans** (JS/TS only — madge supports this):
+5. For JS/TS orphans when requested:
    ```bash
    npx madge --orphans [entry-point]
    ```
-   Outputs file paths to stdout (one per line, not JSON).
-6. **Normalize severity**:
-   - Circular dependency → **[CRT] CRITICAL** (JS: runtime TDZ crashes, breaks tree-shaking. Python: `ImportError` at runtime, signals tight coupling)
-   - Orphan module → **[INF] INFO** (dead code, not harmful but indicates unused files)
-7. **Present findings**: Use the output format below.
+6. Normalize severity:
+   - Circular dependency -> `[CRT]`
+   - Orphan module -> `[INF]`
+7. Provide actionable refactoring suggestions. The usual fix is to extract a
+   shared dependency into a separate module that both sides can import.
 
-### Example Output (JavaScript/TypeScript)
+If `npx madge` appears to become `npm run madge` or emits `Unknown cli config
+"--circular"`, bypass aliases/hooks:
 
-```
-## Dependency Analysis Report
-
-**Tool**: madge | **Entry point**: src/ | **TypeScript**: yes
-
-### Circular Dependencies — 2 cycles found [CRT]
-
-**Cycle 1** (2 modules):
-  src/orders/index.ts → src/orders/validate.ts → src/orders/index.ts
-
-**Cycle 2** (3 modules):
-  src/auth/session.ts → src/auth/tokens.ts → src/auth/refresh.ts → src/auth/session.ts
-
-### Suggested Fixes
-
-**Cycle 1**: `orders/validate.ts` imports from `orders/index.ts` — likely to access
-a shared type or constant. Extract the shared dependency into a separate file
-(e.g., `orders/types.ts`) that both can import without creating a cycle.
-
-**Cycle 2**: This 3-module cycle suggests the auth module has tightly coupled
-responsibilities. Consider extracting token refresh logic into a standalone
-module that doesn't depend on session management.
+```bash
+command npx madge --version
+command npx madge --circular --json --ts-config tsconfig.json --extensions ts,tsx app/
 ```
 
-### Example Output (Python)
+Do not conclude madge is missing until `command npx madge --version` fails.
 
-```
-## Dependency Analysis Report
+## Workflow: Security Scan
 
-**Tool**: pydeps | **Package**: mypackage
+**Triggers**: "security scan", "find vulnerabilities", "SAST scan", "OWASP
+scan", "CWE scan", "scan for security issues", "secret scan", "find secrets",
+"find leaked credentials", "find API keys", "check for hardcoded passwords".
 
-### Circular Dependencies — 2 cycles found [CRT]
-
-**Cycle 1** (2 modules):
-  mypackage.orders → mypackage.orders.validate → mypackage.orders
-
-**Cycle 2** (3 modules):
-  mypackage.auth.session → mypackage.auth.tokens → mypackage.auth.refresh → mypackage.auth.session
-
-### Suggested Fixes
-
-**Cycle 1**: `orders.validate` imports from the `orders` package init — likely
-to access a shared model or constant. Move the shared dependency to a
-`orders.types` or `orders.models` module that both can import cleanly.
-
-**Cycle 2**: Tightly coupled auth subsystem. Extract token refresh into
-a standalone module (e.g., `auth.refresh_service`) that doesn't depend
-on session management.
-```
-
-### Clean Result
-
-```
-## Dependency Analysis Report
-
-**Tool**: madge | **Entry point**: src/ | **TypeScript**: yes
-# or
-**Tool**: pydeps | **Package**: mypackage
-
-No circular dependencies found. Module structure looks clean.
-```
-
-### Orphan Modules (when requested)
-
-```
-### Orphan Modules — 2 files [INF]
-
-These files are not imported by any other module:
-- src/utils/deprecated.ts
-- src/helpers/old-format.ts
-
-Consider removing them if they are unused, or adding imports if they were accidentally disconnected.
-```
-
-**Important**: Always provide actionable refactoring suggestions for circular dependencies. The fix is almost always to extract a shared dependency into a separate module. Do not suggest "just remove the import" without explaining where it should go instead.
-
-## Workflow G: Linter Setup
-
-**Triggers**: "set up linting", "configure eslint", "configure ruff", "add a linter", "set up code quality", "init eslint", "init ruff", "set up biome"
-
-Helps the user set up a linter in a project that doesn't have one. This is the **only workflow that modifies the project** — all other workflows are read-only analysis.
+Security Scan combines Semgrep with detect-secrets through the orchestrator.
+Both run through `uvx` when available.
 
 ### Steps
 
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `TOOL`, `LANGUAGE`, and `FALLBACK`.
-2. **Check if already configured**: If `FALLBACK=false`, the project already has a linter. Inform the user: "Your project already uses [TOOL] with config at [CONFIG]. Want me to review or update it instead?"
-3. **Determine language and tool**:
-
-   **Python** — recommend ruff (fastest, most comprehensive, zero install):
+1. Run detection and read `SEMGREP_AVAILABLE`, `SECRETS_TOOL`, `PROJECT_ROOT`,
+   and `LANGUAGE`. If both tools are unavailable, tell the user to install `uv`
+   with `brew install uv` or `pip install uv`.
+2. Run:
    ```bash
-   # Create ruff.toml with sensible defaults
+   bash <skill-dir>/scripts/security-scan.sh \
+     --project-root "$PROJECT_ROOT" \
+     --language "$LANGUAGE"
    ```
-   Use the skill's `defaults/ruff.toml` as a starting point. Copy it into the project root:
+3. Useful flags:
+   - `--skip-section semgrep`
+   - `--skip-section secrets`
+   - `--semgrep-config p/owasp-top-ten`
+   - `--exclude <pattern>` (repeatable)
+   - `--timeout-per-section 180`
+   - `--max-findings 200`
+4. Load references only when findings exist:
+   - `<skill-dir>/references/semgrep.md`
+   - `<skill-dir>/references/secrets.md`
+5. Render the orchestrator JSON using the normal severity-table style.
+
+Severity:
+- Semgrep `ERROR` -> `[BLK]`
+- Semgrep `WARNING` -> `[CRT]`
+- Semgrep `INFO` -> `[MAJ]`
+- Any secret -> `[BLK]`
+
+Secrets are not optional. Tell the user to rotate credentials first, then remove
+them from source or suppress documented false positives.
+
+Security Scan does not modify the project. Suppression edits such as
+`// nosemgrep` or `# pragma: allowlist secret` are user actions unless the user
+explicitly asks for edits.
+
+## Workflow: Linter Setup
+
+**Triggers**: "set up linting", "configure eslint", "configure ruff", "add a
+linter", "set up code quality", "init eslint", "init ruff", "set up biome".
+
+This is the only workflow that modifies project files.
+
+### Steps
+
+1. Run detection and read `TOOL`, `LANGUAGE`, `FALLBACK`, and `CONFIG`.
+2. If `FALLBACK=false`, the project already has a linter. Say which tool and
+   config were found, then ask whether the user wants a review or config update.
+3. Choose a setup:
+
+   **Python - recommend ruff**:
    ```bash
    cp <skill-dir>/defaults/ruff.toml [project-root]/ruff.toml
    ```
-   That's it — ruff needs no installation if `uvx` is available, and the config is self-contained.
 
-   **JavaScript (no TypeScript)** — recommend ESLint:
+   **JavaScript - recommend ESLint**:
    ```bash
    npm init @eslint/config@latest
    ```
-   This runs an interactive wizard that installs ESLint and creates `eslint.config.js`. If the user wants a non-interactive setup, create `eslint.config.js` using the skill's default as a template:
+
+   Non-interactive fallback:
    ```bash
    cp <skill-dir>/defaults/eslint.config.js [project-root]/eslint.config.js
    npm install --save-dev eslint
    ```
 
-   **TypeScript** — recommend ESLint with TypeScript support:
+   **TypeScript - recommend ESLint with TypeScript support**:
    ```bash
    npm init @eslint/config@latest
-   ```
-   The wizard detects TypeScript and installs `typescript-eslint` automatically. If the user wants non-interactive setup:
-   ```bash
    npm install --save-dev eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin typescript-eslint
    ```
-   Then create an `eslint.config.js` that imports `typescript-eslint`:
+   If using the non-interactive install path, also create `eslint.config.js`:
    ```js
    import tseslint from 'typescript-eslint';
 
@@ -488,416 +562,24 @@ Helps the user set up a linter in a project that doesn't have one. This is the *
    );
    ```
 
-   **Alternative — Biome** (if the user prefers or mentions Biome):
+   **Biome alternative**:
    ```bash
    npm install --save-dev @biomejs/biome
    npx @biomejs/biome init
    ```
-   Biome creates a `biome.json` with sensible defaults and handles both JS and TS natively.
-
-4. **Verify setup**: After creating the config and installing dependencies, run detection again to confirm:
+4. Verify setup:
    ```bash
    bash <skill-dir>/scripts/detect-linter.sh [project-path]
    ```
-   Verify `FALLBACK=false` and `TOOL` matches what was set up.
-
-5. **Run initial analysis**: Offer to run a Workflow A review or Workflow C audit to show the user what the new linter finds.
-
-6. **Suggest git add**: Remind the user to commit the new config:
-   > "Linter configured. Don't forget to commit the config file so your team gets the same rules."
-
-### Example Output
-
-```
-## Linter Setup Complete
-
-**Tool**: ESLint + TypeScript | **Config**: eslint.config.js
-
-Installed:
-- eslint@9.x
-- typescript-eslint@8.x
-- @typescript-eslint/parser@8.x
-
-Created: eslint.config.js (based on typescript-eslint recommended rules + complexity threshold 10)
-
-Want me to run an initial code quality audit?
-```
-
-## Workflow H: Type Checking
-
-**Triggers**: "type check", "verify types", "run pyright", "run tsc", "type errors", "check types", "verify code", "static type analysis"
-
-Runs static type checking to catch type errors, missing attributes, incorrect function signatures, and other issues that linters miss. Linters catch style and pattern issues; type checkers catch correctness issues — code that will fail at runtime due to type mismatches.
-
-**Supported tools**:
-- **Python**: pyright (via `npx pyright` — zero install, fast, works on untyped code too)
-- **TypeScript**: tsc (the TypeScript compiler in check-only mode)
-
-### Steps
-
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE`, `PROJECT_ROOT`, `TYPE_CHECKER`, and `TYPE_CHECK_COMMAND`.
-2. **Check TYPE_CHECKER**: If `TYPE_CHECKER=none`, inform the user:
-   > "Type checking is available for Python (pyright) and TypeScript (tsc) projects. This project appears to be plain JavaScript without TypeScript. To enable type checking, add a `tsconfig.json` with `npx tsc --init`."
-3. **Load reference** based on `TYPE_CHECKER`:
-   - `pyright` → read `<skill-dir>/references/pyright.md`
-4. **Run type checker**: Execute `TYPE_CHECK_COMMAND` on the target.
-
-   **Python (pyright)**:
-   ```bash
-   npx pyright --outputjson [files-or-directory]
-   ```
-   If the user targets specific files, pass them as arguments. If targeting a directory or whole project, run without file arguments (pyright uses `pyrightconfig.json` or defaults to the current directory).
-
-   **TypeScript (tsc)**:
-   ```bash
-   npx tsc --noEmit
-   ```
-   tsc uses the project's `tsconfig.json`. It doesn't support targeting individual files when a tsconfig exists — run on the whole project and filter results to the user's target files when presenting output.
-
-5. **Handle exit codes**: Exit code 1 means type errors were found (expected — parse the output). Do NOT treat it as a command failure.
-
-6. **Parse output**:
-
-   **Pyright JSON** (`--outputjson`): Parse the `generalDiagnostics` array. Each entry has `file`, `severity`, `message`, `range`, `rule`. **Line numbers are 0-based** — add 1 when displaying.
-
-   **tsc text output**: Parse lines matching the pattern:
-   ```
-   file(line,col): error TSxxxx: message
-   file(line,col): warning TSxxxx: message
-   ```
-   Extract file path, line number, column, error code, and message.
-
-7. **Normalize severity**: Load `<skill-dir>/references/severity-map.md` if issues are found.
-   - pyright `error` → **[CRT] CRITICAL**
-   - pyright `warning` → **[MAJ] MAJOR**
-   - pyright `information` → **[MIN] MINOR**
-   - tsc `error` → **[CRT] CRITICAL**
-   - tsc `warning` → **[MAJ] MAJOR**
-
-8. **Present findings**: Use the output format below. For each type error, explain what the mismatch is and suggest a concrete fix (add a type annotation, convert a value, add a None check, etc.).
-
-### Filtering noise
-
-Pyright can be noisy on projects with few type annotations or many untyped third-party dependencies. Apply these filters:
-
-- **reportMissingTypeStubs**: If many `reportMissingTypeStubs` warnings appear (untyped third-party packages), group them into a single summary line instead of listing each one: "N third-party packages lack type stubs (e.g., `requests`, `flask`). Install stubs with `pip install types-requests` or suppress with `reportMissingTypeStubs = false` in pyrightconfig.json."
-- **Large output**: If more than 50 diagnostics, show the top 50 by severity and note the total count.
-
-### Pre-commit integration
-
-When the user runs Workflow D (pre-commit check) and `TYPE_CHECKER` is not `none`, also run type checking on the changed files and include results in the pre-commit verdict. Type errors should block the commit recommendation just like lint errors.
-
-For pyright, pass the changed files directly:
-```bash
-npx pyright --outputjson file1.py file2.py
-```
-
-For tsc, run `npx tsc --noEmit` (full project) and filter diagnostics to only the changed files.
-
-### Example Output (Python)
-
-```
-## Type Check Report
-
-**Tool**: pyright | **Files analyzed**: 15 | **Python version**: 3.11
-
-| Severity | Count |
-|----------|-------|
-| [CRT] CRITICAL | 3 |
-| [MAJ] MAJOR | 1 |
-| **Total** | **4** |
-
-### src/orders.py
-
-| Line | Severity | Rule | Message |
-|------|----------|------|---------|
-| 23 | [CRT] | reportAttributeAccessIssue | Cannot access attribute "total" for class "Order" |
-| 45 | [CRT] | reportArgumentType | Argument of type "str" cannot be assigned to parameter "count" of type "int" |
-
-**Line 23**: The `Order` class doesn't have a `total` attribute. Check the class definition — you might mean `order_total` or need to add the attribute.
-
-**Line 45**: Passing a string where an integer is expected. Add `int()` conversion or fix the caller.
-```
-
-### Example Output (TypeScript)
-
-```
-## Type Check Report
-
-**Tool**: tsc | **Config**: tsconfig.json | **Files analyzed**: 22
-
-| Severity | Count |
-|----------|-------|
-| [CRT] CRITICAL | 2 |
-| **Total** | **2** |
-
-### src/api/handler.ts
-
-| Line | Severity | Code | Message |
-|------|----------|------|---------|
-| 15 | [CRT] | TS2345 | Argument of type 'string' is not assignable to parameter of type 'number' |
-| 32 | [CRT] | TS2339 | Property 'name' does not exist on type 'Response' |
-
-**Line 15**: Type mismatch in function call. The function expects a `number` but receives a `string`. Convert with `Number(value)` or `parseInt(value)` or update the function signature.
-
-**Line 32**: The `Response` type doesn't have a `name` property. Check the type definition or use optional chaining if the property might not exist.
-```
-
-### Clean Result
-
-```
-## Type Check Report
-
-**Tool**: pyright | **Files analyzed**: 15 | **Python version**: 3.11
-
-No type errors found. Types look clean.
-```
-
-## Workflow I: Architecture Review
-
-**Triggers**: "architecture review", "review architecture", "arch audit", "find god modules", "find hub modules", "layering violations", "coupling metrics", "instability", "module coupling", "show me the structure", "onboard me to this codebase"
-
-Produces a structured architecture report with ten sections — cycles, layering violations, hub/god modules, instability hotspots, deep import chains, oversized files, excessive exports, dead code, and complex functions. Designed for **on-demand audits + onboarding new developers** to an unfamiliar codebase. Not a pre-commit gate; findings are top-N, not pass/fail.
-
-### Steps
-
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE`, `PROJECT_ROOT`, and `FRAMEWORK`.
-2. **Run the orchestrator**:
-   ```bash
-   bash <skill-dir>/scripts/arch-review.sh \
-     --project-root "$PROJECT_ROOT" \
-     --language "$LANGUAGE" \
-     --framework "$FRAMEWORK"
-   ```
-   Useful flags:
-   - `--top N` (default 10) — findings per section
-   - `--include-tests` — opt in to scanning test files
-   - `--skip-section <name>` (repeatable) — drop a noisy section
-   - `--max-file-loc`, `--max-exports`, `--max-ca`, `--max-ce`, `--max-chain-depth` — threshold overrides
-3. **Load reference**: read `<skill-dir>/references/architecture.md` for the JSON schema, layer mapping, and severity thresholds.
-4. **Render the report**: parse the JSON and produce a markdown report using the format below.
-
-### Output format
-
-Render the report using the same severity-table style as Workflows A/C/E/F. Each non-clean section gets its own block; clean sections appear only in a one-line footer.
-
-#### Summary header
-
-```
-## Architecture Review Report
-
-**Language**: <lang> | **Framework**: <framework> | **Files scanned**: <N> | **Top-N**: <N>
-
-| Severity | Count |
-|----------|-------|
-| [CRT] CRITICAL | <count> |
-| [MAJ] MAJOR | <count> |
-| [MIN] MINOR | <count> |
-| [INF] INFO | <count> |
-| **Total** | **<sum>** |
-
-**Sections**: <N> run, <N> skipped (<list>)
-```
-
-#### Per-section block
-
-For each section with `status: "found"`, render a heading, a severity tag, a top-N table of findings, then prose explanations for `[MAJ]` and above. Examples:
-
-```
-### Layering Violations [MAJ] — <N> findings
-
-**Inferred layers** (heuristic + framework: <framework>):
-- presentation: <folder list>
-- application:  <folder list>
-- domain:       <folder list>
-- infrastructure: <folder list>
-
-| Violation | Importer | Imports |
-|-----------|----------|---------|
-| domain → infrastructure | src/domain/order.py:12 | src/db/session.py |
-
-**src/domain/order.py:12**: `domain` should not depend on `infrastructure`. Extract the persistence concern into a repository interface defined in `domain/` and inject the concrete implementation from `infrastructure/`.
-```
-
-```
-### Hub Modules [MAJ] — top N by fan-in (Ca)
-
-| File | Ca | Ce | I | Severity |
-|------|----|----|---|----------|
-
-**<file>** (Ca=N): N modules depend on this. Changes here ripple widely.
-```
-
-#### Clean sections footer
-
-```
-**Clean sections**: cycles, deep_chains, excessive_exports
-```
-
-#### Skipped sections
-
-```
-**Skipped**: dead_code (vulture not available — `pip install vulture` or install `uv`)
-```
-
-#### Onboarding hints (always include if any modules have Ca > 0)
-
-```
-### Onboarding hints
-
-Based on coupling metrics, the modules most central to understanding this codebase are:
-1. **<file with highest Ca>** — used everywhere; read this first
-2. **<second highest>**
-3. **<third highest>**
-```
-
-#### Followups (always include)
-
-```
-### Followups
-
-- Drill into a specific cycle: "show me cycle 1 in detail"
-- See all complex functions (not just top-N): "run complexity analysis"
-- Re-run including tests: "architecture review --include-tests"
-- Skip dead-code: "architecture review --skip dead_code"
-```
-
-### Error handling
-
-- If `detect-linter.sh` returns `LANGUAGE=unknown`: report "Architecture review supports Python and JS/TS projects. This project is not recognized."
-- If `python3` is not on PATH: report "Workflow I requires `python3` (universally available on macOS/Linux). Install via `brew install python` or `apt install python3`."
-- If a section has `status: "error"`: include it in the report with the underlying `reason` so the user understands why it failed. Other sections still render.
-- If a section has `status: "skipped"`: include it in the "Skipped" footer line with the `reason`.
-
-### Important
-
-- Findings are **not** errors. Always present a useful report even if many sections returned `found`.
-- Workflow F still exists as the focused cycles-only entry point. If the user just wants cycle detection, prefer F. Workflow I includes cycles as one of its ten sections.
-- Workflow I's `complex_functions` section now reports **both** cyclomatic and cognitive complexity, with cognitive driving the severity tag (same rules as Workflow E). Same dual-metric merge logic — see `references/cognitive-complexity.md`.
-- After presenting the report, offer the follow-up actions verbatim — they are parseable by the user.
-
-## Workflow J: Security Scan (SAST + Secrets)
-
-**Triggers**: "security scan", "find vulnerabilities", "SAST scan", "OWASP scan", "CWE scan", "scan for security issues", "secret scan", "find secrets", "find leaked credentials", "find API keys", "check for hardcoded passwords"
-
-Cross-language security scan combining **Semgrep** (SAST, ~2000 community rules covering OWASP Top 10, CWE Top 25, language-specific dangerous patterns) with **detect-secrets** (entropy + plugin-based secret discovery). Both run in parallel via an orchestrator that mirrors Workflow I's pattern.
-
-Zero-install: both tools run via `uvx`. First scan downloads rulesets (~few MB, cached).
-
-### Steps
-
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `SEMGREP_AVAILABLE` and `SECRETS_TOOL`. If both are `false`/`none`, inform the user:
-   > "Workflow J requires `uvx` (from `uv`). Install with `brew install uv` or `pip install uv`, then re-run."
-
-2. **Run the orchestrator**:
-   ```bash
-   bash <skill-dir>/scripts/security-scan.sh \
-     --project-root "$PROJECT_ROOT" \
-     --language "$LANGUAGE"
-   ```
-
-   Useful flags:
-   - `--skip-section semgrep` or `--skip-section secrets` — drop a sub-tool
-   - `--semgrep-config p/owasp-top-ten` — override the ruleset (default `p/security-audit`)
-   - `--exclude <pattern>` — extra exclude (concatenated with the skill's default exclude set; repeatable)
-   - `--timeout-per-section 180` — seconds per sub-tool (default 180)
-   - `--max-findings 200` — cap per section before truncation (default 200)
-
-3. **Load references** when findings exist:
-   - `<skill-dir>/references/semgrep.md` for any Semgrep findings
-   - `<skill-dir>/references/secrets.md` for any secret findings
-   Both files contain severity rationale, JSON schema, and suppression guidance.
-
-4. **Parse and render**: the orchestrator emits the same `{summary, sections}` JSON shape as Workflow I. Each section has `status` (`ok` / `found` / `skipped` / `error`), `severity` (most-severe finding), and `findings`. Build the report using the Output Format section's severity-table style.
-
-### Severity mapping
-
-- **Semgrep** (`extra.severity`):
-  - `ERROR` → `[BLK] BLOCKER` (clear vulnerabilities: injection, auth bypass, etc.)
-  - `WARNING` → `[CRT] CRITICAL` (likely vulnerabilities: taint flows, dangerous APIs)
-  - `INFO` → `[MAJ] MAJOR` (security smells, hardening opportunities)
-- **Secrets** (any finding) → `[BLK] BLOCKER` — committed credentials are leaked the moment they hit history. Rotate first, then remove from source.
-
-See `references/severity-map.md` for the full table.
-
-### Example output
-
-```
-## Security Scan Report
-
-**Project**: ~/projects/api | **Elapsed**: 12.4s | **Sections**: semgrep, secrets
-
-| Severity | Count |
-|----------|-------|
-| [BLK] BLOCKER  | 4 |
-| [CRT] CRITICAL | 2 |
-| [MAJ] MAJOR    | 5 |
-| **Total**      | **11** |
-
-### Semgrep — 7 findings [BLK]
-
-| File | Line | Rule | CWE | Severity |
-|------|------|------|-----|----------|
-| src/runner.py | 12 | python.lang.security.audit.subprocess-shell-true | CWE-78 | [BLK] |
-| web/handler.js | 22 | javascript.lang.security.audit.xss.direct-response-write | CWE-79 | [MAJ] |
-| ... | | | | |
-
-**src/runner.py:12** (subprocess-shell-true, CWE-78):
-Subprocess invocation with `shell=True` and an interpolated argument is a
-classic OS-command injection vector. Replace with `subprocess.run([...], shell=False)`
-and pass the arguments as a list.
-
-### Secrets — 4 findings [BLK]
-
-| File | Line | Type | Severity |
-|------|------|------|----------|
-| src/config.py | 5 | AWS Access Key | [BLK] |
-| src/config.py | 12 | Base64 High Entropy String | [BLK] |
-| .env.example | 1 | Secret Keyword | [BLK] |
-| tests/fixtures/auth.json | 3 | JWT Token | [BLK] |
-
-Every secret here must be rotated at its issuing service and removed from
-source. For `tests/fixtures/auth.json`, if the value is a non-functional
-test fixture, suppress with `# pragma: allowlist secret` on that line and
-document why.
-```
-
-### Clean result
-
-```
-## Security Scan Report
-
-**Project**: ~/projects/api | **Elapsed**: 12.4s
-
-No security findings. Semgrep ruleset: p/security-audit (~600 rules);
-detect-secrets: 25+ plugins. Code looks clean.
-```
-
-### Followups (always offer)
-
-- "Narrow to high-severity findings": re-run with `--semgrep-config p/cwe-top-25`
-- "Skip secrets, just SAST": `--skip-section secrets`
-- "Audit a specific file": pass `--project-root <file>` (works on single files too)
-- "Drill into one finding": load the file at the reported line
-
-### Error handling
-
-- If `SEMGREP_AVAILABLE=false`: emit the semgrep section as skipped (`{"status":"skipped","reason":"uvx not available"}`). The report still renders.
-- If `SECRETS_TOOL=none`: emit the secrets section as skipped.
-- If `SECRETS_TOOL=gitleaks`: the current adapter ships only detect-secrets — inform the user that gitleaks integration is documented in `references/secrets.md` and they can drive gitleaks directly for now.
-- If a sub-tool times out: section status becomes `error` with `reason: "timed out"`. Other sub-tool still renders.
-- If Semgrep returns > 200 findings: report sets `truncated: true` and keeps the most severe 200. Tell the user: "Showing top 200 of N total. Re-run with `--semgrep-config p/owasp-top-ten` or `--max-findings <N>` to focus."
-
-### Important
-
-- A secret finding is **never optional**. Rotate first, then suppress documented false positives — never the other way around.
-- Workflow J does not modify the project. Suppression edits (`// nosemgrep`, `# pragma: allowlist secret`) are user actions, not skill actions.
+   Confirm `FALLBACK=false`.
+5. Offer to run Lint as the initial analysis.
+6. Remind the user to commit the new config.
 
 ## Output Format
 
 ### Summary Header
 
-```
+```markdown
 ## Code Quality Report
 
 **Tool**: ESLint | **Config**: eslint.config.js | **Files scanned**: 3
@@ -912,75 +594,84 @@ detect-secrets: 25+ plugins. Code looks clean.
 
 ### Per-file Findings
 
-```
+```markdown
 ### src/index.ts
 
 | Line | Severity | Rule | Message |
 |------|----------|------|---------|
 | 10 | [CRT] | no-unused-vars | 'foo' is defined but never used |
 | 25 | [MAJ] | eqeqeq | Expected '===' but found '==' |
-| 42 | [MIN] | prefer-const | 'x' is never reassigned, use 'const' |
+| 42 | [MIN] | prefer-const | 'x' is never reassigned; use 'const' |
 ```
 
 For MAJOR and above, add a brief explanation after the table:
 
-```
-**Line 10** (`no-unused-vars`): Unused variables indicate dead code. Remove `foo` or use it.
-**Line 25** (`eqeqeq`): `==` performs type coercion which can cause subtle bugs. Use `===` for strict equality.
+```markdown
+**Line 10** (`no-unused-vars`): Unused variables indicate dead code. Remove
+`foo` or use it.
+**Line 25** (`eqeqeq`): `==` performs type coercion. Use `===`.
 ```
 
 ### Clean Result
 
-```
+```markdown
 ## Code Quality Report
 
 **Tool**: ESLint | **Config**: eslint.config.js | **Files scanned**: 3
 
-No issues found. Code looks clean.
+No issues found.
 ```
 
 ## Fix Strategy
 
-1. **Prefer native auto-fix**: Always try the tool's `--fix` first. Tools handle line drift internally when fixing multiple issues in the same file.
-2. **Re-analyze after fixing**: Always run the analysis command again after fixes to confirm the fix didn't introduce new issues.
-3. **Safe vs unsafe fixes**: For ruff, `--fix` applies safe fixes only. Mention `--unsafe-fixes` if the user wants to apply all. For Biome, `--write` is safe, `--write --unsafe` is all.
-4. **Manual fixes**: For issues without auto-fix, provide the specific code change (old → new) that the user can review before applying.
-5. **Report clearly**: State what was fixed, what remains, and the severity of remaining issues.
+1. Prefer native auto-fix first.
+2. Re-analyze after fixing.
+3. For ruff, `--fix` applies safe fixes only; mention `--unsafe-fixes` only if
+   the user wants all fixes.
+4. For Biome, `--write` is safe and `--write --unsafe` applies unsafe fixes.
+5. Complexity, dependency cycles, and security findings are manual unless the
+   user explicitly asks for source edits.
+6. Report what changed, what remains, and the severity of remaining issues.
 
 ## Error Handling
 
 ### Tool not installed
 
-If the linter command fails with "command not found":
-- **ruff**: `uvx ruff` runs without installation (requires `uv`). If `uv` is missing: `pip install ruff`
-- **eslint**: `npm install --save-dev eslint` (the skill provides a default config, but ESLint itself must be available via `npx`)
-- **biome**: `npm install --save-dev @biomejs/biome && npx @biomejs/biome init`
+If a tool command fails with "command not found":
+- **ruff**: `uvx ruff` runs without permanent installation but requires `uv`;
+  if `uv` is missing, use `pip install ruff`.
+- **eslint**: `npm install --save-dev eslint`.
+- **biome**: `npm install --save-dev @biomejs/biome && npx @biomejs/biome init`.
+- **pyright**: `npx pyright`.
 
 ### Large output
 
-If the linter returns more than 50 issues, truncate to the top 50 by severity and report:
-> "Showing top 50 of N total issues. Run audit on specific files to see more."
+If any command returns more than 50 findings, truncate to the top 50 by severity
+and report:
+
+> Showing top 50 of N total issues. Run analysis on specific files to see more.
 
 ### Parse errors / syntax errors
 
-If the linter reports parsing errors (e.g., ESLint `ruleId: null` with "Parsing error"), report as BLOCKER severity. These must be fixed before other analysis is meaningful.
+If a linter reports parsing errors, report them as BLOCKER severity. Syntax
+errors must be fixed before the rest of the analysis is meaningful.
 
 ## Reference Files
 
-Load these as needed based on the detected tool:
+Load references based on the detected tool or requested workflow:
 
 | File | When to load |
 |------|-------------|
-| `<skill-dir>/references/severity-map.md` | When issues are found — severity normalization |
-| `<skill-dir>/references/eslint.md` | When TOOL=eslint — CLI flags, output schema, common rules |
-| `<skill-dir>/references/biome.md` | When TOOL=biome — CLI flags, output schema, categories |
-| `<skill-dir>/references/ruff.md` | When TOOL=ruff — CLI flags, output schema, rule prefixes |
-| `<skill-dir>/references/pyright.md` | Workflow H, TYPE_CHECKER=pyright — CLI flags, JSON schema, common rules |
-| `<skill-dir>/references/madge.md` | Workflow F, JS/TS dependency analysis — CLI flags, output schema |
-| `<skill-dir>/references/pydeps.md` | Workflow F, Python dependency analysis — depcycle (primary), pydeps (graphs) |
-| `<skill-dir>/references/architecture.md` | Workflow I — layer mapping, framework rules, JSON schema |
-| `<skill-dir>/references/knip.md` | Workflow I, JS/TS dead-code section |
-| `<skill-dir>/references/vulture.md` | Workflow I, Python dead-code section |
-| `<skill-dir>/references/cognitive-complexity.md` | Workflow E and Workflow I `complex_functions` — metric definition, sonarjs/CCR001 output parsers, refactoring patterns |
-| `<skill-dir>/references/semgrep.md` | Workflow J — config registry, JSON schema, suppression, default excludes, exit codes |
-| `<skill-dir>/references/secrets.md` | Workflow J — detect-secrets plugins/baseline schema, false-positive triage, gitleaks alternative |
+| `<skill-dir>/references/severity-map.md` | Findings exist and need severity normalization |
+| `<skill-dir>/references/eslint.md` | `TOOL=eslint` or JS/TS complexity wrapper details |
+| `<skill-dir>/references/biome.md` | `TOOL=biome` |
+| `<skill-dir>/references/ruff.md` | `TOOL=ruff` |
+| `<skill-dir>/references/pyright.md` | Type Check with pyright |
+| `<skill-dir>/references/madge.md` | Architecture Review focused cycles for JS/TS |
+| `<skill-dir>/references/pydeps.md` | Architecture Review focused cycles for Python |
+| `<skill-dir>/references/architecture.md` | Architecture Review full audit |
+| `<skill-dir>/references/knip.md` | Architecture Review dead-code section for JS/TS |
+| `<skill-dir>/references/vulture.md` | Architecture Review dead-code section for Python |
+| `<skill-dir>/references/cognitive-complexity.md` | Lint or Architecture Review complexity findings |
+| `<skill-dir>/references/semgrep.md` | Security Scan with Semgrep findings |
+| `<skill-dir>/references/secrets.md` | Security Scan with secret findings |

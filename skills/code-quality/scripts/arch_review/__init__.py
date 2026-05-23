@@ -1,1 +1,1 @@
-"""arch_review — orchestrator for Workflow I (architecture review)."""
+"""arch_review - orchestrator for Architecture Review."""

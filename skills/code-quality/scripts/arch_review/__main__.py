@@ -12,7 +12,7 @@ from arch_review.runner import run_audit
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="arch_review",
-        description="Architecture review orchestrator (Workflow I of code-quality skill).",
+        description="Architecture Review orchestrator for the code-quality skill.",
     )
     parser.add_argument("--project-root", required=True)
     parser.add_argument("--language", required=True, choices=["python", "javascript"])

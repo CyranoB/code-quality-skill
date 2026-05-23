@@ -162,7 +162,7 @@ class SeverityForTest(unittest.TestCase):
 
 class RunBothBackendUnavailableTest(unittest.TestCase):
     """Verifies that metric='both' surfaces skipped/error when neither
-    backend produced output — protects Workflow I from rendering 'clean'
+    backend produced output - protects Architecture Review from rendering 'clean'
     when no tool actually ran."""
 
     def _patch_backends(self, cyc_result, cog_result):

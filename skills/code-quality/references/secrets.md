@@ -1,6 +1,6 @@
-# Secret Scanning Reference (Workflow J)
+# Secret Scanning Reference
 
-Workflow J's secret-scanning sub-tool finds committed credentials — API keys,
+Security Scan's secret-scanning sub-tool finds committed credentials - API keys,
 tokens, private keys, passwords, high-entropy strings — that should never have
 made it into source control.
 
@@ -122,7 +122,7 @@ git add .secrets.baseline
 uvx detect-secrets scan --baseline .secrets.baseline
 ```
 
-The skill does **not** use baseline files by default — every Workflow J run
+The skill does **not** use baseline files by default - every Security Scan run
 starts fresh. Users who want incremental review should drive detect-secrets
 directly or wire it into a pre-commit hook.
 

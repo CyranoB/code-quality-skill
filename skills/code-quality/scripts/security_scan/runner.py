@@ -1,4 +1,4 @@
-"""Workflow J orchestrator — runs semgrep + detect-secrets in parallel.
+"""Security Scan orchestrator - runs semgrep + detect-secrets in parallel.
 
 Mirrors the arch_review.runner pattern: safe() wrapper around each sub-tool,
 ThreadPoolExecutor with max_workers=2 (the two tools are heavy and IO-bound,
