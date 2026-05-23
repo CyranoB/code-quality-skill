@@ -1,0 +1,45 @@
+{
+  "version": "1.x.x",
+  "results": [
+    {
+      "check_id": "python.lang.security.audit.subprocess-shell-true.subprocess-shell-true",
+      "path": "/abs/project/src/runner.py",
+      "start": {"line": 12, "col": 5},
+      "end": {"line": 12, "col": 60},
+      "extra": {
+        "message": "Subprocess invocation with shell=True. ...",
+        "severity": "ERROR",
+        "metadata": {
+          "cwe": ["CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"],
+          "owasp": ["A03:2021 - Injection"]
+        }
+      }
+    },
+    {
+      "check_id": "python.lang.security.audit.dangerous-exec.dangerous-exec",
+      "path": "/abs/project/src/handler.py",
+      "start": {"line": 7, "col": 1},
+      "end": {"line": 7, "col": 18},
+      "extra": {
+        "message": "Detected dynamic code execution from user input.",
+        "severity": "WARNING",
+        "metadata": {
+          "cwe": "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+        }
+      }
+    },
+    {
+      "check_id": "javascript.lang.security.audit.xss.direct-response-write",
+      "path": "/abs/project/web/handler.js",
+      "start": {"line": 22, "col": 3},
+      "end": {"line": 22, "col": 40},
+      "extra": {
+        "message": "Reflected XSS risk via res.write of user input.",
+        "severity": "INFO",
+        "metadata": {}
+      }
+    }
+  ],
+  "errors": [],
+  "paths": {"scanned": ["/abs/project"], "skipped": []}
+}
