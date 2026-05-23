@@ -2,18 +2,18 @@
 name: code-quality
 description: >-
   Run code quality analysis using project-native tools (ESLint, Biome, ruff,
-  pyright, tsc, madge, pydeps): linting, auto-fix, type checking, complexity,
-  dependency, and architecture analysis. Use when the user asks to review
-  code, lint a file, check code quality, fix linting errors, audit a project,
-  run static analysis, find bugs, or do pre-commit checks. Also triggers on
-  ESLint, Biome, ruff, pyright, tsc; unused variables, style violations;
-  cyclomatic complexity, complex functions, hard to test; circular
-  dependencies, dependency graph, module dependencies, find cycles, orphan
-  modules; set up linting, configure eslint/ruff/biome, add a linter; type
-  check, verify types, type errors, type safety, static type analysis;
-  architecture review, arch audit, hub modules, god modules, layering
-  violations, coupling metrics, instability, show me the structure, or
-  onboard me to this codebase.
+  pyright, tsc, madge, pydeps, Semgrep, detect-secrets): linting, auto-fix,
+  type checking, complexity, dependency, architecture, and security analysis.
+  Use when the user asks to review code, lint a file, check code quality, fix
+  linting errors, audit a project, run static analysis, find bugs, scan for
+  vulnerabilities, or do pre-commit checks. Also triggers on ESLint, Biome,
+  ruff, pyright, tsc; unused variables, style violations; cyclomatic or
+  cognitive complexity, complex functions, hard to test; circular
+  dependencies, dependency graph, find cycles, orphan modules; set up
+  linting; type check, type errors, type safety; architecture review, hub
+  modules, god modules, layering violations, coupling, onboard me to this
+  codebase; security scan, SAST, OWASP, CWE, find vulnerabilities, secret
+  scan, leaked credentials, find API keys.
 ---
 
 # Code Quality Skill
@@ -77,13 +77,21 @@ When no project-level config is found (`FALLBACK=true`), the detect script autom
 
 Rules enabled: `E` (pycodestyle errors), `F` (pyflakes), `W` (pycodestyle warnings), `C90` (cyclomatic complexity), `I` (import sorting), `N` (naming), `UP` (pyupgrade), `B` (bugbear), `S` (security/bandit), `SIM` (simplify), `T20` (print statements). Complexity threshold: 10. Runs via `uvx ruff` — zero install needed. Config passed via `--config` flag.
 
-### JavaScript/TypeScript — Biome (zero-config)
+### JavaScript/TypeScript — Biome (zero-config) for general lint
 
-When no linter is configured, the skill uses **Biome** as the fallback instead of ESLint. Biome handles both JavaScript and TypeScript natively — no parser plugins needed. It runs via `npx @biomejs/biome` with built-in rules covering: correctness (unused variables, unreachable code), suspicious patterns (`noExplicitAny`, `noDoubleEquals`), complexity, and formatting.
+When no linter is configured, the skill uses **Biome** as the fallback for Workflows A/C/D. Biome handles both JavaScript and TypeScript natively — no parser plugins needed. It runs via `npx @biomejs/biome` with built-in rules covering: correctness (unused variables, unreachable code), suspicious patterns (`noExplicitAny`, `noDoubleEquals`), complexity, and formatting.
 
-**Why Biome over ESLint for defaults**: ESLint cannot parse TypeScript without `@typescript-eslint/parser`, which is rarely installed in unconfigured projects. Biome works out of the box for both JS and TS.
+**Why Biome over ESLint for general lint**: ESLint cannot parse TypeScript without `@typescript-eslint/parser`, which is rarely installed in unconfigured projects. Biome works out of the box for both JS and TS.
 
-The `defaults/eslint.config.js` file is still available for projects that explicitly use ESLint but lack a config — it can be referenced manually.
+### JavaScript/TypeScript — Bundled ESLint + sonarjs (Workflow E / I only)
+
+For cognitive complexity (Workflow E) and Workflow I's `complex_functions` section on JS/TS, the skill ships a bundled ESLint with `eslint-plugin-sonarjs` in `defaults/package.json`. It's invoked via `scripts/eslint-defaults.sh`, which lazily runs `npm ci --prefix defaults/` on first use (~10–20s, ~30MB into `defaults/node_modules`, gitignored) and then execs `defaults/node_modules/.bin/eslint`.
+
+This bundled ESLint is **not** used as the A/C/D fallback — Biome remains there for speed and TS parsing without plugins. Workflow E and Workflow I are the only entry points that consume the sonarjs rules. Users wanting sonarjs during general lint should install `eslint-plugin-sonarjs` in their project's own `package.json` so Workflow A/C/D picks it up via the project's ESLint config.
+
+**Security plugins are intentionally not bundled** — Workflow J's Semgrep covers JS/TS security with deeper rules; two security engines would create noise.
+
+The `defaults/eslint.config.js` file is also available standalone for projects that explicitly use ESLint but lack a config — it can be referenced manually.
 
 ### When to suggest project-level config
 
@@ -185,82 +193,85 @@ Offer follow-up actions: "I can fix the N auto-fixable issues, drill into a spec
    - **PASS**: "All changed files pass lint and type checks. Ready to commit."
    - **FAIL**: Show issues in changed files only, with severity and suggested fixes. Include both lint and type errors.
 
-## Workflow E: Complexity Analysis
+## Workflow E: Complexity Analysis (Cognitive + Cyclomatic)
 
-**Triggers**: "check complexity", "find complex functions", "cyclomatic complexity", "complexity analysis", "too complex", "hard to test"
+**Triggers**: "check complexity", "find complex functions", "cyclomatic complexity", "cognitive complexity", "complexity analysis", "too complex", "hard to test", "hard to read", "refactor candidates"
 
-This workflow runs **with built-in defaults** — no project configuration required. The skill injects complexity rules via CLI flags so it works even when the project has no complexity rules configured. Inspired by SonarQube's default quality gate, which ships with complexity checks enabled out of the box.
+This workflow runs **with built-in defaults** — no project configuration required. It reports **both** cyclomatic and cognitive complexity in a single table. Cognitive is the headline metric because it tracks human reading effort (the strongest predictor of defect density and maintenance pain); cyclomatic stays as a secondary column because path-count still matters for test coverage planning.
 
-### Default Threshold
+### Default Thresholds
 
-| Metric | Max | Rationale |
-|--------|-----|-----------|
-| Cyclomatic complexity | **10** | Industry standard; matches ESLint and ruff defaults. SonarQube uses 15 for cognitive complexity — cyclomatic 10 is the equivalent bar. |
+| Metric | Max | Severity if exceeded |
+|--------|-----|----------------------|
+| **Cognitive complexity** | **15** (Sonar default) | 16–25 → `[MAJ] MAJOR`, ≥ 26 → `[CRT] CRITICAL` |
+| Cyclomatic complexity | 10 | Any value over the cap → `[MAJ] MAJOR` |
 
-Functions at or below 10 are manageable. 11–20 = moderate risk. 21+ = high risk, should be refactored.
+When both metrics exceed their cap for the same function, **cognitive drives the severity tag**. See `references/severity-map.md` and `references/cognitive-complexity.md`.
+
+### Sources per language
+
+| Language | Cyclomatic | Cognitive | Install |
+|----------|------------|-----------|---------|
+| Python | `ruff C901` (uvx) | `flake8-cognitive-complexity` CCR001 via `uvx --with` | both zero-install |
+| JS/TS | ESLint core `complexity` | `eslint-plugin-sonarjs` `cognitive-complexity` via bundled wrapper | bundled in `defaults/package.json`, lazy `npm ci` on first use |
 
 ### Steps
 
-1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `TOOL` and `LANGUAGE`.
-2. **Construct complexity command**: Do **not** use the generic `COMMAND`. Build a complexity-specific command based on the detected `TOOL` and `LANGUAGE`:
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `LANGUAGE` and `COGNITIVE_COMMAND`. The detect script already constructs the per-language cognitive command — use it.
+2. **Run cyclomatic + cognitive**. Easiest path: invoke `arch_review/complexity.py`'s `run_complexity_check(root, language, metric="both")` programmatically, or run the two commands separately and merge by `(file, line ±2)`:
 
-   **TOOL=ruff** (configured):
-   ```bash
-   ruff check --select C901 --output-format json [files...]
-   ```
-
-   **TOOL=eslint** (configured):
-   ```bash
-   npx eslint --rule '{"complexity": ["warn", 10]}' --format json [files...]
-   ```
-
-   **TOOL=biome** (configured or fallback): Biome has no cyclomatic complexity rule. Try ESLint with the skill's default config:
-   ```bash
-   npx eslint --config <skill-dir>/defaults/eslint.config.js --rule '{"complexity": ["warn", 10]}' --format json [files...]
-   ```
-   This works for `.js` files. For TypeScript files, ESLint needs `@typescript-eslint/parser` — if it fails, inform the user: "Complexity analysis requires ESLint with TypeScript support. Run `npm init @eslint/config@latest` to set up ESLint, then re-run."
-
-   **TOOL=pylint**: Pylint does not include mccabe by default. Fall back to ruff:
+   **Python**:
    ```bash
    uvx ruff check --select C901 --output-format json [files...]
+   uvx --with flake8-cognitive-complexity flake8 \
+     --select=CCR001 --max-cognitive-complexity=15 [files...]
    ```
 
-   **TOOL=none, LANGUAGE=python**: Use ruff via uvx (works with zero project setup):
+   **JS/TS** (must run with `cwd` set to the project root):
    ```bash
-   uvx ruff check --select C901 --output-format json [files...]
+   bash <skill-dir>/scripts/eslint-defaults.sh \
+     --no-config-lookup \
+     --config <skill-dir>/defaults/eslint.config.js \
+     --rule '{"complexity":["warn",10],"sonarjs/cognitive-complexity":["warn",15]}' \
+     --format json [files...]
    ```
 
-   **TOOL=npm-script**: Try ESLint directly (may already be installed as a dependency):
-   ```bash
-   npx eslint --rule '{"complexity": ["warn", 10]}' --format json [files...]
-   ```
-   If this fails with exit code 2 (no config), suggest ESLint setup.
+   The bundled ESLint wrapper installs `eslint-plugin-sonarjs` lazily on first run (~10–20s, ~30MB, gitignored). See `references/eslint.md`.
 
-3. **Run the command**: Execute on the target files/directory.
-4. **Parse and normalize**: Extract function name, measured complexity, and threshold from each finding. Map **all** complexity violations to **[MAJ] MAJOR** regardless of raw tool severity.
-5. **Present findings**: Use the output format below. For each violation, include:
-   - Function name and location
-   - Measured complexity vs. threshold (e.g., "complexity 15 > max 10")
-   - Actionable refactoring suggestion (extract helper functions, simplify conditionals, use early returns, replace nested if/else with guard clauses)
+3. **Merge findings**: Pair cyclomatic + cognitive findings by `(file, line ±2)`. The function name comes from the cyclomatic finding (ruff and ESLint expose it in the rule message); sonarjs and flake8 cognitive messages do not include it. Cognitive-only findings (no nearby cyclomatic) still appear with `function: ""`.
+4. **Normalize severity**: For each merged finding, drive severity from cognitive when present:
+   - cognitive ≤ 15: filtered out by the tools (won't appear)
+   - cognitive 16–25 → `[MAJ] MAJOR`
+   - cognitive ≥ 26 → `[CRT] CRITICAL`
+   - cognitive missing, cyclomatic only → `[MAJ] MAJOR`
+5. **Present findings**: Use the output format below. Sort by cognitive (descending). For each violation, include both metric values when available, and an actionable refactoring suggestion drawn from `references/cognitive-complexity.md` (early returns, extract method, table dispatch, polymorphism).
 
 ### Example Output
 
 ```
 ## Complexity Analysis Report
 
-**Tool**: ruff (C901) | **Threshold**: 10 | **Files scanned**: 12
+**Language**: python | **Cognitive threshold**: 15 | **Cyclomatic threshold**: 10 | **Files scanned**: 12
 
-| File | Line | Function | Complexity | Severity |
-|------|------|----------|------------|----------|
-| src/orders.py | 23 | process_order | 18 | [MAJ] |
-| src/auth.py | 45 | validate_token | 12 | [MAJ] |
+| File | Line | Function | Cyclomatic | Cognitive | Severity |
+|------|------|----------|-----------:|----------:|----------|
+| src/orders.py | 23 | process_order | 18 | 34 | [CRT] |
+| src/auth.py   | 45 | validate_token | 12 | 22 | [MAJ] |
+| src/utils.py  | 80 |                |  – | 19 | [MAJ] |
 
-**src/orders.py:23** (`process_order`, complexity 18):
-This function has nearly twice the recommended complexity. Consider extracting
-the discount calculation and inventory check into separate functions.
+**src/orders.py:23** (`process_order`, cyclomatic 18, cognitive 34):
+Both metrics well above threshold; cognitive 34 means deeply nested or
+sequence-breaking logic. Extract the discount and inventory branches into
+helper functions, and convert the validation chain to early returns —
+expected cognitive after refactor: ~12.
 
-**src/auth.py:45** (`validate_token`, complexity 12):
-Slightly above threshold. Simplify by using early returns for invalid cases.
+**src/auth.py:45** (`validate_token`, cyclomatic 12, cognitive 22):
+Moderate cyclomatic, but cognitive 22 suggests the branches are nested.
+Flatten with guard clauses for invalid cases.
+
+**src/utils.py:80** (cognitive 19, function name not reported by tool):
+Cognitive-only finding — likely a nested conditional block at line 80 that
+no cyclomatic rule caught. Inspect manually.
 ```
 
 ### Clean Result
@@ -268,12 +279,12 @@ Slightly above threshold. Simplify by using early returns for invalid cases.
 ```
 ## Complexity Analysis Report
 
-**Tool**: ruff (C901) | **Threshold**: 10 | **Files scanned**: 12
+**Language**: python | **Cognitive threshold**: 15 | **Cyclomatic threshold**: 10 | **Files scanned**: 12
 
-No functions exceed the complexity threshold. Code is well-structured.
+No functions exceed the complexity thresholds. Code is well-structured.
 ```
 
-**Important**: Complexity violations have no auto-fix. Always provide manual refactoring suggestions. Do not offer to run `--fix`.
+**Important**: Complexity violations have no auto-fix. Always provide manual refactoring suggestions. Do not offer to run `--fix`. When the cognitive sub-tool is unavailable (no `uvx` for Python, no `npm` for JS/TS), the workflow falls back to cyclomatic-only with a warning in the report.
 
 ## Workflow F: Dependency Analysis
 
@@ -762,7 +773,125 @@ Based on coupling metrics, the modules most central to understanding this codeba
 
 - Findings are **not** errors. Always present a useful report even if many sections returned `found`.
 - Workflow F still exists as the focused cycles-only entry point. If the user just wants cycle detection, prefer F. Workflow I includes cycles as one of its ten sections.
+- Workflow I's `complex_functions` section now reports **both** cyclomatic and cognitive complexity, with cognitive driving the severity tag (same rules as Workflow E). Same dual-metric merge logic — see `references/cognitive-complexity.md`.
 - After presenting the report, offer the follow-up actions verbatim — they are parseable by the user.
+
+## Workflow J: Security Scan (SAST + Secrets)
+
+**Triggers**: "security scan", "find vulnerabilities", "SAST scan", "OWASP scan", "CWE scan", "scan for security issues", "secret scan", "find secrets", "find leaked credentials", "find API keys", "check for hardcoded passwords"
+
+Cross-language security scan combining **Semgrep** (SAST, ~2000 community rules covering OWASP Top 10, CWE Top 25, language-specific dangerous patterns) with **detect-secrets** (entropy + plugin-based secret discovery). Both run in parallel via an orchestrator that mirrors Workflow I's pattern.
+
+Zero-install: both tools run via `uvx`. First scan downloads rulesets (~few MB, cached).
+
+### Steps
+
+1. **Detect**: Run `bash <skill-dir>/scripts/detect-linter.sh [project-path]` to get `SEMGREP_AVAILABLE` and `SECRETS_TOOL`. If both are `false`/`none`, inform the user:
+   > "Workflow J requires `uvx` (from `uv`). Install with `brew install uv` or `pip install uv`, then re-run."
+
+2. **Run the orchestrator**:
+   ```bash
+   bash <skill-dir>/scripts/security-scan.sh \
+     --project-root "$PROJECT_ROOT" \
+     --language "$LANGUAGE"
+   ```
+
+   Useful flags:
+   - `--skip-section semgrep` or `--skip-section secrets` — drop a sub-tool
+   - `--semgrep-config p/owasp-top-ten` — override the ruleset (default `p/security-audit`)
+   - `--exclude <pattern>` — extra exclude (concatenated with the skill's default exclude set; repeatable)
+   - `--timeout-per-section 180` — seconds per sub-tool (default 180)
+   - `--max-findings 200` — cap per section before truncation (default 200)
+
+3. **Load references** when findings exist:
+   - `<skill-dir>/references/semgrep.md` for any Semgrep findings
+   - `<skill-dir>/references/secrets.md` for any secret findings
+   Both files contain severity rationale, JSON schema, and suppression guidance.
+
+4. **Parse and render**: the orchestrator emits the same `{summary, sections}` JSON shape as Workflow I. Each section has `status` (`ok` / `found` / `skipped` / `error`), `severity` (most-severe finding), and `findings`. Build the report using the Output Format section's severity-table style.
+
+### Severity mapping
+
+- **Semgrep** (`extra.severity`):
+  - `ERROR` → `[BLK] BLOCKER` (clear vulnerabilities: injection, auth bypass, etc.)
+  - `WARNING` → `[CRT] CRITICAL` (likely vulnerabilities: taint flows, dangerous APIs)
+  - `INFO` → `[MAJ] MAJOR` (security smells, hardening opportunities)
+- **Secrets** (any finding) → `[BLK] BLOCKER` — committed credentials are leaked the moment they hit history. Rotate first, then remove from source.
+
+See `references/severity-map.md` for the full table.
+
+### Example output
+
+```
+## Security Scan Report
+
+**Project**: ~/projects/api | **Elapsed**: 12.4s | **Sections**: semgrep, secrets
+
+| Severity | Count |
+|----------|-------|
+| [BLK] BLOCKER  | 4 |
+| [CRT] CRITICAL | 2 |
+| [MAJ] MAJOR    | 5 |
+| **Total**      | **11** |
+
+### Semgrep — 7 findings [BLK]
+
+| File | Line | Rule | CWE | Severity |
+|------|------|------|-----|----------|
+| src/runner.py | 12 | python.lang.security.audit.subprocess-shell-true | CWE-78 | [BLK] |
+| web/handler.js | 22 | javascript.lang.security.audit.xss.direct-response-write | CWE-79 | [MAJ] |
+| ... | | | | |
+
+**src/runner.py:12** (subprocess-shell-true, CWE-78):
+Subprocess invocation with `shell=True` and an interpolated argument is a
+classic OS-command injection vector. Replace with `subprocess.run([...], shell=False)`
+and pass the arguments as a list.
+
+### Secrets — 4 findings [BLK]
+
+| File | Line | Type | Severity |
+|------|------|------|----------|
+| src/config.py | 5 | AWS Access Key | [BLK] |
+| src/config.py | 12 | Base64 High Entropy String | [BLK] |
+| .env.example | 1 | Secret Keyword | [BLK] |
+| tests/fixtures/auth.json | 3 | JWT Token | [BLK] |
+
+Every secret here must be rotated at its issuing service and removed from
+source. For `tests/fixtures/auth.json`, if the value is a non-functional
+test fixture, suppress with `# pragma: allowlist secret` on that line and
+document why.
+```
+
+### Clean result
+
+```
+## Security Scan Report
+
+**Project**: ~/projects/api | **Elapsed**: 12.4s
+
+No security findings. Semgrep ruleset: p/security-audit (~600 rules);
+detect-secrets: 25+ plugins. Code looks clean.
+```
+
+### Followups (always offer)
+
+- "Narrow to high-severity findings": re-run with `--semgrep-config p/cwe-top-25`
+- "Skip secrets, just SAST": `--skip-section secrets`
+- "Audit a specific file": pass `--project-root <file>` (works on single files too)
+- "Drill into one finding": load the file at the reported line
+
+### Error handling
+
+- If `SEMGREP_AVAILABLE=false`: emit the semgrep section as skipped (`{"status":"skipped","reason":"uvx not available"}`). The report still renders.
+- If `SECRETS_TOOL=none`: emit the secrets section as skipped.
+- If `SECRETS_TOOL=gitleaks`: the current adapter ships only detect-secrets — inform the user that gitleaks integration is documented in `references/secrets.md` and they can drive gitleaks directly for now.
+- If a sub-tool times out: section status becomes `error` with `reason: "timed out"`. Other sub-tool still renders.
+- If Semgrep returns > 200 findings: report sets `truncated: true` and keeps the most severe 200. Tell the user: "Showing top 200 of N total. Re-run with `--semgrep-config p/owasp-top-ten` or `--max-findings <N>` to focus."
+
+### Important
+
+- A secret finding is **never optional**. Rotate first, then suppress documented false positives — never the other way around.
+- Workflow J does not modify the project. Suppression edits (`// nosemgrep`, `# pragma: allowlist secret`) are user actions, not skill actions.
 
 ## Output Format
 
@@ -852,3 +981,6 @@ Load these as needed based on the detected tool:
 | `<skill-dir>/references/architecture.md` | Workflow I — layer mapping, framework rules, JSON schema |
 | `<skill-dir>/references/knip.md` | Workflow I, JS/TS dead-code section |
 | `<skill-dir>/references/vulture.md` | Workflow I, Python dead-code section |
+| `<skill-dir>/references/cognitive-complexity.md` | Workflow E and Workflow I `complex_functions` — metric definition, sonarjs/CCR001 output parsers, refactoring patterns |
+| `<skill-dir>/references/semgrep.md` | Workflow J — config registry, JSON schema, suppression, default excludes, exit codes |
+| `<skill-dir>/references/secrets.md` | Workflow J — detect-secrets plugins/baseline schema, false-positive triage, gitleaks alternative |
